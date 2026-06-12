@@ -18,7 +18,7 @@ class FloatingButton(QWidget):
         # 设置窗口背景透明[reference:3]
         self.setAttribute(Qt.WA_TranslucentBackground)
         # 设置初始窗口大小（宽120，高40）
-        self.resize(120, 40)
+        self.resize(40, 40)
 
         self._on_hide = on_hide
         self._on_restore = on_restore

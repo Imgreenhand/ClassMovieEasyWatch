@@ -135,7 +135,6 @@ def run_button_mode(hider):
 
     app = QApplication(sys.argv)
     app.setApplicationName("ClassMovieEasyWatch")
-
     events = ButtonEvents(
         on_hide=hider.hide,
         on_restore=hider.restore,
@@ -150,8 +149,8 @@ def run_button_mode(hider):
 
     try:
         app.exec()
-    finally:
         events.stop()
+    finally:
         hider._tray.hide()
         print("程序已退出。")
 
