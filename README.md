@@ -49,7 +49,7 @@ pip install -r requirements.txt
 ### 1. 克隆/下载项目
 
 ```bash
-git clone https://github.com/yourname/ClassMovieEasyWatch.git
+git clone https://github.com/Imgreenhand/ClassMovieEasyWatch.git
 cd ClassMovieEasyWatch
 ```
 
@@ -101,8 +101,8 @@ python main.py
 
 ```json
 {
-    "way": "hotkey",        // "hotkey" 或 "button"
-    "save_file": "default"  // 当前激活的配置档案名（不含 .json）
+    "way": "hotkey", 
+    "save_file": "default"
 }
 ```
 
@@ -147,7 +147,7 @@ ClassMovieEasyWatch/
 │   ├── FindSave.py             # 读写用户存档
 │   ├── default.json            # 默认配置示例
 │   ├── chrome.json             # Chrome 配置示例
-│   └── save.json               # 用户运行状态（自动生成）
+│   └── save.json               # 用户运行状态
 └── README.md
 ```
 
