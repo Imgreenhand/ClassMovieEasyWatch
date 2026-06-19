@@ -9,25 +9,20 @@ class GetMainWindow:
     """通过 return_hwnd() 获取目标窗口父窗口的 hwnd"""
 
     def __init__(self, browser_name: str = "msedge.exe"):
-        """
-        browser_name: 目标浏览器进程名，如 msedge.exe / chrome.exe / firefox.exe
-        """
         self._browser_name = browser_name
 
-    # ── 动态浏览器名 ──────────────────────────────────────────
-
+    # 笔记：这相当于get
     @property
     def browser_name(self) -> str:
         return self._browser_name
-
+    # 笔记：set
     @browser_name.setter
     def browser_name(self, value: str):
         self._browser_name = value
 
-    # ── 窗口查找 ──────────────────────────────────────────────
-
+    # 窗口查找
     def find_windows_by_exe(self, exe_name: str):
-        """找到全部名称为 exe_name 的可见窗口"""
+        """找到全部名称为 exe_name 的窗口"""
         all_pids = []
 
         for pr in psutil.process_iter(["pid", "name", "exe"]):
@@ -42,7 +37,7 @@ class GetMainWindow:
             return []
 
         target_windows = []
-
+        # 枚举回调
         def enum_callback(hwnd, hwnd_list: list):
             if win32gui.IsWindowVisible(hwnd):
                 _, pid = win32process.GetWindowThreadProcessId(hwnd)

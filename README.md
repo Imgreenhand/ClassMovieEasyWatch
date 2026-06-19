@@ -1,6 +1,7 @@
 # Class Movie Easy Watch
 
-属于是菜鸟的猎奇想法 + Vibe Coding 大人神力，代码看不得（悲）
+属于是菜鸟的猎奇想法 + Vibe Coding 大人神力，代码看不得（悲）。 
+正在试图看懂AI给的代码，修改了DataManager
 
 ---
 

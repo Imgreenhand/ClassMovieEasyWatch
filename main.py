@@ -1,11 +1,3 @@
-"""
-ClassMovieEasyWatch - 课堂观影一键隐藏 / 还原工具
-
-触发方式由 SaveData/save.json 的 way 字段决定：
-  "hotkey" → 全局快捷键（SaveData/*.json 中配置热键）
-  "button" → PySide6 浮动按钮
-"""
-
 import sys
 import time
 
@@ -14,12 +6,11 @@ from Inputs.ButtonEvents import ButtonEvents
 from Windows.WindowManager import WindowManager
 from Windows.MediaControlVK import toggle_play_pause
 from Windows.TrayManager import TrayManager
-from SaveData.ProfileManager import ProfileManager
+from SaveData.DataManager import DataManager
 from SaveData.FindSave import get_way, get_current_profile_name
 
 
-# ── 核心逻辑（hotkey / button 共用）──────────────────────────────
-
+# 核心逻辑
 class MovieHider:
     """统筹隐藏 / 还原流程"""
 
@@ -28,8 +19,7 @@ class MovieHider:
         self._window = WindowManager(browser_name=profile.browser_names)
         self._tray = TrayManager(on_restore_callback=self.restore)
 
-    # ── 隐藏流程 ──────────────────────────────────────────────
-
+    #隐藏
     def hide(self) -> None:
         """暂停 -> 隐藏窗口 -> 显示托盘图标"""
         if self._window.is_hidden:
@@ -50,10 +40,9 @@ class MovieHider:
             self._tray.show()
             print("[Hide] 系统托盘图标已显示")
 
-    # ── 还原流程 ──────────────────────────────────────────────
-
+    # 还原
     def restore(self) -> None:
-        """隐藏托盘 → 还原窗口 → 继续播放"""
+        """隐藏托盘 -> 还原窗口 -> 继续播放"""
         if not self._window.is_hidden:
             print("[!] 当前没有隐藏的窗口，忽略")
             return
@@ -73,17 +62,14 @@ class MovieHider:
             toggle_play_pause()
             print("[Restore] 播放已恢复")
 
-
-# ── 入口 ─────────────────────────────────────────────────────────
-
 def main():
     # 从存档读取触发方式和配置档案名
     way = get_way()
     profile_name = get_current_profile_name()
 
     # 加载配置档案
-    pm = ProfileManager()
-    profile = pm.load(profile_name)
+    dm = DataManager()
+    profile = dm.data.get(profile_name) or dm.data.get("default")
 
     print(f"[Config] 触发方式: {way}")
     print(f"[Config] 配置档案: {profile.name}")
