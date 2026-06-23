@@ -41,7 +41,7 @@ pip install -r requirements.txt
 ### 1. 克隆/下载项目
 
 ```bash
-git clone https://github.com/yourname/ClassMovieEasyWatch.git
+git clone https://github.com/Imgreenhand/ClassMovieEasyWatch.git
 cd ClassMovieEasyWatch
 ```
 
