@@ -4,7 +4,7 @@ import time
 from Inputs.InputEvents import InputsEvents
 from Inputs.ButtonEvents import ButtonEvents
 from Windows.WindowManager import WindowManager
-from Windows.MediaControlVK import toggle_play_pause
+from Windows.MediaControlVK import toggle_play_pause, sound_to_zero, back_to_sound
 from Windows.TrayManager import TrayManager
 from SaveData.DataManager import DataManager
 from SaveData.FindSave import get_way, get_current_profile_name
@@ -18,10 +18,10 @@ class MovieHider:
         self._profile = profile
         self._window = WindowManager(browser_name=profile.browser_names)
         self._tray = TrayManager(on_restore_callback=self.restore)
+        self._back_sound: float | None = None
 
     #隐藏
     def hide(self) -> None:
-        """暂停 -> 隐藏窗口 -> 显示托盘图标"""
         if self._window.is_hidden:
             print("[!] 已有窗口处于隐藏状态，忽略")
             return
@@ -36,13 +36,14 @@ class MovieHider:
             print("[!] 未能获取目标窗口，请确认浏览器正在前台播放视频")
             return
 
+        self._back_sound = sound_to_zero()
+
         if self._profile.tray_icon_enabled:
             self._tray.show()
             print("[Hide] 系统托盘图标已显示")
 
     # 还原
     def restore(self) -> None:
-        """隐藏托盘 -> 还原窗口 -> 继续播放"""
         if not self._window.is_hidden:
             print("[!] 当前没有隐藏的窗口，忽略")
             return
@@ -55,6 +56,10 @@ class MovieHider:
         if hwnd is None:
             print("[!] 原窗口已不存在")
             return
+
+        if self._back_sound is not None:
+            back_to_sound(self._back_sound)
+            self._back_sound = None
 
         if self._profile.auto_pause:
             print("[Restore] 窗口已还原，稍后恢复播放...")

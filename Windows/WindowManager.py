@@ -1,5 +1,3 @@
-"""窗口管理器：隐藏 / 恢复当前前台窗口"""
-
 import win32gui
 import win32con
 from .GetWindow import GetMainWindow
@@ -9,14 +7,11 @@ class WindowManager:
 
     def __init__(self, browser_name: str = "msedge.exe"):
         self._hidden_hwnd: list | None = None   # 被隐藏窗口的句柄
-        self.hider = GetMainWindow(browser_name=browser_name)
-
-    # ── 隐藏 ─────────────────────────────────────────────────────
+        self.hider = GetMainWindow(browser_name = browser_name)
 
     def hide_window(self) -> bool:
-        """隐藏当前前台窗口，返回是否成功"""
         if self._hidden_hwnd is not None:
-            return False  # 已经隐藏了一个窗口，防止重复隐藏
+            return False
 
         hwnd = self.hider.return_hwnd()
 
@@ -27,10 +22,8 @@ class WindowManager:
 
         for h in hwnd:
             win32gui.ShowWindow(h, win32con.SW_HIDE)
-
+        # SW_HIDE：窗口状态常量——隐藏
         return True
-
-    # ── 恢复 ─────────────────────────────────────────────────────
 
     def restore(self) -> list | None:
         """恢复之前隐藏的窗口，返回窗口句柄；若无隐藏窗口则返回 None"""
@@ -48,8 +41,7 @@ class WindowManager:
 
         return hwnd_list
 
-    # ── 状态 ─────────────────────────────────────────────────────
-
+    # 状态
     @property
     def is_hidden(self) -> bool:
         return self._hidden_hwnd is not None

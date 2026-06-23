@@ -1,7 +1,7 @@
 # Class Movie Easy Watch
 
 属于是菜鸟的猎奇想法 + Vibe Coding 大人神力，代码看不得（悲）。 
-正在试图看懂AI给的代码，修改了DataManager
+正在试图看懂AI给的代码
 
 ---
 
@@ -17,6 +17,7 @@
 - **两种触发方式**：
   - **全局热键**（默认 `Ctrl+Alt+Q` 隐藏，`Ctrl+Alt+F9` 恢复）
   - **浮动按钮**（屏幕上的半透明圆钮，点击切换隐藏/恢复）
+- **静音**：防止全局的暂停出现意外
 - **多配置档案**：通过 `SaveData/*.json` 轻松切换浏览器、热键等设置。
 - **系统托盘图标**：隐藏后托盘显示图标，支持右键还原或退出程序。
 
@@ -24,23 +25,14 @@
 
 ## 依赖安装
 
-本项目基于 Python 3.10+ 开发，依赖以下库：
-
-```
-**pynput pywin32 psutil pystray Pillow PySide6**
-```
+本项目基于 Python 3.10+ 开发，依赖以下库(版本如下图所示)：
+![](/ReadMeNeed/屏幕截图%202026-06-23%20155458.png)
 
 通过requirements.txt直接安装
 
 ```bash
 pip install -r requirements.txt
 ```
-
-- `pynput`：全局热键监听  
-- `pywin32`：Windows API 调用（窗口管理、进程枚举）  
-- `psutil`：进程信息获取  
-- `pystray` + `Pillow`：系统托盘图标  
-- `PySide6`：浮动按钮（Qt 界面）
 
 ---
 
@@ -101,12 +93,12 @@ python main.py
 
 ```json
 {
-    "way": "hotkey",        // "hotkey" 或 "button"
-    "save_file": "default"  // 当前激活的配置档案名（不含 .json）
+    "way": "hotkey",
+    "save_file": "default"
 }
 ```
 
-你可以手动修改 `way` 来切换触发方式，或修改 `save_file` 来加载其他配置档案（如 `chrome`）。
+你可以手动修改 `way` 来切换触发方式（hotkey, button），或修改 `save_file` 来加载其他配置档案（如 `chrome`）。
 
 ---
 
@@ -129,37 +121,28 @@ python main.py
 
 ## 项目结构
 
-```
-ClassMovieEasyWatch/
-├── main.py                     # 主入口
-├── Inputs/
-│   ├── InputEvents.py          # 全局热键监听
-│   └── ButtonEvents.py         # 浮动按钮事件封装
-├── Windows/
-│   ├── GetWindow.py            # 根据进程名获取窗口句柄
-│   ├── WindowManager.py        # 窗口隐藏/恢复逻辑
-│   ├── MediaControlVK.py       # 媒体播放/暂停控制
-│   └── TrayManager.py          # 系统托盘图标管理
-├── GUI/
-│   └── FloatingButton.py       # PySide6 浮动按钮界面
-├── SaveData/
-│   ├── ProfileManager.py       # 配置档案加载
-│   ├── FindSave.py             # 读写用户存档
-│   ├── default.json            # 默认配置示例
-│   ├── chrome.json             # Chrome 配置示例
-│   └── save.json               # 用户运行状态（自动生成）
-└── README.md
-```
+![](/ReadMeNeed/屏幕截图%202026-06-22%20201139.png)
+
+懒得打字了说是。
 
 ---
 
 ## 开发进度
 
 - 核心功能已完成（Maybe?）
-- 还需轻量化AI写的数据管理器等 
 - 缺少GUI通过窗口配置JSON 
 - 目前全局的媒体暂停会影响到其他播放 
+- 考虑把按钮模式换成一种更隐蔽的方式（比如说判断一个区域内的鼠标点击事件，或者说把按钮伪装成别的图标）
 
+## 待办事项 / 已知 Bug 修复清单
+
+### Bug 1：媒体暂停键被后台应用（网易云等）劫持
+- [ ] **问题描述**：当前使用全局虚拟键码 `VK_MEDIA_PLAY_PAUSE` 模拟按键，这会导致系统将指令发送给后台正在运行的网易云等音乐软件，而非原本的目标浏览器，导致网页视频未能成功暂停。
+- [ ] **涉及文件**：`Windows/MediaControlVK.py`、`main.py`
+- [ ] **修复方案**：
+    - [ ] 修改 `Windows/MediaControlVK.py` 中的 `toggle_play_pause()` 函数，增加接收 `hwnd`（窗口句柄）参数。
+    - [ ] 使用 `PostMessageW` 将 `WM_KEYDOWN` 和 `WM_KEYUP` 事件及 `VK_SPACE`（空格键）发送给目标浏览器窗口句柄。
+    - [ ] 修改 `main.py` 中 `hide()` 和 `restore()` 函数的调用点，显式传入 `self._window.hwnd`。
 ---
 
 **Enjoy your class movie time without worry!** 

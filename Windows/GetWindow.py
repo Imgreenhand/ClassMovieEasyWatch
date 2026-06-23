@@ -29,7 +29,6 @@ class GetMainWindow:
             try:
                 if pr.info["exe"] and exe_name.lower() == os.path.basename(pr.info["exe"]).lower():
                     all_pids.append(pr.info["pid"])
-                    print(f"[GetWindow] 找到对应任务，pid = {pr.info['pid']}")
             except Exception:
                 continue
 
@@ -38,18 +37,16 @@ class GetMainWindow:
 
         target_windows = []
         # 枚举回调
-        def enum_callback(hwnd, hwnd_list: list):
+        def enum_callback(hwnd, hwnd_list: list) -> bool:
             if win32gui.IsWindowVisible(hwnd):
                 _, pid = win32process.GetWindowThreadProcessId(hwnd)
                 if pid in all_pids:
                     hwnd_list.append(hwnd)
             return True
-
+        # EnumW：在枚举每一个窗口时调用回调，hwnd_list => target_win...
         win32gui.EnumWindows(enum_callback, target_windows)
         return target_windows
 
     def return_hwnd(self) -> list[int]:
-        """返回当前目标浏览器的所有可见窗口句柄"""
         value = self.find_windows_by_exe(self._browser_name)
-        print(f"[DEBUG] return_hwnd 返回 {len(value)} 个窗口句柄: {value}")
         return value
