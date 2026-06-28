@@ -1,12 +1,15 @@
 import sys
 import time
 
+from PySide6.QtCore import QEventLoop
+
 from Inputs.InputEvents import InputsEvents
 from Inputs.ButtonEvents import ButtonEvents
 from Windows.WindowManager import WindowManager
 from Windows.MediaControlVK import toggle_play_pause, sound_to_zero, back_to_sound
 from SaveData.DataManager import DataManager
 from SaveData.FindSave import get_way, get_current_profile_name
+from GUI.StartWindow import StartWindow
 
 
 # 核心逻辑
@@ -25,7 +28,6 @@ class MovieHider:
             return
 
         if self._profile.auto_pause:
-            print("[Hide] 正在暂停媒体...")
             toggle_play_pause()
             time.sleep(0.15)
 
@@ -42,7 +44,6 @@ class MovieHider:
             print("[!] 当前没有隐藏的窗口，忽略")
             return
 
-        print("[Restore] 正在还原窗口...")
         hwnd = self._window.restore()
         if hwnd is None:
             print("[!] 原窗口已不存在")
@@ -53,13 +54,17 @@ class MovieHider:
             self._back_sound = None
 
         if self._profile.auto_pause:
-            print("[Restore] 窗口已还原，稍后恢复播放...")
             time.sleep(0.3)
             toggle_play_pause()
-            print("[Restore] 播放已恢复")
 
 def main():
     """初始化并返回 (MovieHider, events) 元组"""
+    # 显示开始窗口，等待用户选择后继续
+    loop = QEventLoop()
+    start_win = StartWindow(on_start=loop.quit)
+    start_win.show()
+    loop.exec()
+
     # 从存档读取触发方式和配置档案名
     way = get_way()
     profile_name = get_current_profile_name()
@@ -67,12 +72,6 @@ def main():
     # 加载配置档案
     dm = DataManager()
     profile = dm.data.get(profile_name) or dm.data.get("default")
-
-    print(f"[Config] 触发方式: {way}")
-    print(f"[Config] 配置档案: {profile.name}")
-    print(f"[Config] 浏览器: {profile.browser_names}")
-    print(f"[Config] 自动暂停: {'开' if profile.auto_pause else '关'}")
-
     # 初始化模块
     hider = MovieHider(profile)
 
@@ -93,13 +92,6 @@ def run_hotkey_mode(hider, profile):
         on_restore=hider.restore,
     )
     events.start()
-
-    print("=" * 55)
-    print(f"  ClassMovieEasyWatch 已就绪  [{profile.name}]")
-    print(f"  {profile.hotkey_hide}   — 紧急隐藏（暂停 + 托盘）")
-    print(f"  {profile.hotkey_restore}  — 还原继续（窗口 + 播放）")
-    print("  托盘图标右键  — 还原 / 退出")
-    print("=" * 55)
     return events
 
 
@@ -110,10 +102,4 @@ def run_button_mode(hider):
         on_restore=hider.restore,
     )
     events.start()
-
-    print("=" * 55)
-    print("  ClassMovieEasyWatch 已就绪  [浮动按钮模式]")
-    print("  点击屏幕上的浮动按钮进行隐藏 / 还原")
-    print("  托盘图标右键  — 还原 / 退出")
-    print("=" * 55)
     return events

@@ -38,6 +38,13 @@ KEYBOARD_ROWS = [
 ]
 
 MODIFIER_KEYS = {"ctrl", "alt", "shift", "win"}
+# 需要用 <> 包裹的特殊键（pynput 规范）
+BRACKET_KEYS = {
+    "f1","f2","f3","f4","f5","f6","f7","f8","f9","f10","f11","f12",
+    "space","tab","enter","backspace","esc","caps_lock","delete",
+    "up","down","left","right","home","end","page_up","page_down",
+    "insert","pause","print_screen",
+}
 
 
 class KeyButton(QPushButton):
@@ -129,7 +136,7 @@ class VirtualKeyboard(QFrame):
             layout.addWidget(row_widget)
 
     def set_hotkey(self, hotkey_str: str) -> None:
-        """根据 '<ctrl>+<alt>+q' 格式设置键盘状态"""
+        """根据 '<ctrl>+<alt>+<f9>' 格式设置键盘状态"""
         for btn in self._mod_btns.values():
             btn.set_active(False)
         if self._main_key_btn:
@@ -142,7 +149,11 @@ class VirtualKeyboard(QFrame):
         for p in parts:
             p = p.strip()
             if p.startswith("<") and p.endswith(">"):
-                mods.append(p[1:-1].lower())
+                inner = p[1:-1].lower()
+                if inner in MODIFIER_KEYS:
+                    mods.append(inner)
+                else:
+                    key = inner
             else:
                 key = p.lower()
 
@@ -158,12 +169,13 @@ class VirtualKeyboard(QFrame):
         self._update_label()
 
     def get_hotkey(self) -> str:
-        """返回当前快捷键字符串"""
+        """返回当前快捷键字符串，特殊键用 <> 包裹"""
         mods = [k for k, btn in self._mod_btns.items() if btn.active()]
         key = self._main_key_btn.key_val if self._main_key_btn else ""
         if not key:
             return ""
-        return "+".join(f"<{m}>" for m in mods) + f"+{key}"
+        key_str = f"<{key}>" if key in BRACKET_KEYS else key
+        return "+".join(f"<{m}>" for m in mods) + f"+{key_str}"
 
     def _on_key_click(self, btn: KeyButton) -> None:
         if btn.is_modifier:
