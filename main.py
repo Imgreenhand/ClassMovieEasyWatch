@@ -1,150 +1,79 @@
 import sys
-import time
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QWidget
+from PySide6.QtGui import QIcon, QAction, QCursor
+from PySide6.QtCore import QTimer
+import StartMain
+import SettingWindow
 
-from Inputs.InputEvents import InputsEvents
-from Inputs.ButtonEvents import ButtonEvents
-from Windows.WindowManager import WindowManager
-from Windows.MediaControlVK import toggle_play_pause, sound_to_zero, back_to_sound
-from Windows.TrayManager import TrayManager
-from SaveData.DataManager import DataManager
-from SaveData.FindSave import get_way, get_current_profile_name
+class TrayIcon(QSystemTrayIcon):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setIcon(QIcon("./GUI/Art/Sign.svg"))
+        self.setToolTip("ClassMovieEasyWatch")
 
+        self._hidden_widget = QWidget()
+        self._hidden_widget.hide()
+        self.tray_menu = QMenu(self._hidden_widget)
 
-# 核心逻辑
-class MovieHider:
-    """统筹隐藏 / 还原流程"""
+        # 为 QAction 指定 parent，并把它们保存为实例属性以保留引用
+        self.set_action = QAction("设置", self.tray_menu)
+        self.set_action.triggered.connect(self.set_main)
+        self.about_action = QAction("关于", self.tray_menu)
+        self.start_action = QAction("开始", self.tray_menu)
+        self.start_action.triggered.connect(self.start_main)
+        self.quit_action = QAction("退出", self.tray_menu)
+        self.quit_action.triggered.connect(QApplication.instance().quit)
 
-    def __init__(self, profile):
-        self._profile = profile
-        self._window = WindowManager(browser_name=profile.browser_names)
-        self._tray = TrayManager(on_restore_callback=self.restore)
-        self._back_sound: float | None = None
+        self.tray_menu.addAction(self.set_action)
+        self.tray_menu.addSeparator()
+        self.tray_menu.addAction(self.about_action)
+        self.tray_menu.addSeparator()
+        self.tray_menu.addAction(self.start_action)
+        self.tray_menu.addSeparator()
+        self.tray_menu.addAction(self.quit_action)
 
-    #隐藏
-    def hide(self) -> None:
-        if self._window.is_hidden:
-            print("[!] 已有窗口处于隐藏状态，忽略")
-            return
+        # 标准用法：设置 context menu
+        self.setContextMenu(self.tray_menu)
 
-        if self._profile.auto_pause:
-            print("[Hide] 正在暂停媒体...")
-            toggle_play_pause()
-            time.sleep(0.15)
+        # 兜底：activated 信号，用于在某些 Windows 环境下 setContextMenu 失效
+        self.activated.connect(self._on_activated)
 
-        ok = self._window.hide_window()
-        if not ok:
-            print("[!] 未能获取目标窗口，请确认浏览器正在前台播放视频")
-            return
+        # 如果你希望一开始就可见（通常 show() 就足够）
+        self.show()
 
-        self._back_sound = sound_to_zero()
+    def _on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        # 打印 reason 有助于排查（在不同平台上右键/左键可能映射不同）
+        print("Tray activated, reason =", reason)
+        # 延迟到下一事件循环弹出，避免在信号回调中直接弹出失效
+        QTimer.singleShot(0, lambda: self._popup_menu())
 
-        if self._profile.tray_icon_enabled:
-            self._tray.show()
-            print("[Hide] 系统托盘图标已显示")
+    def _popup_menu(self):
+        pos = QCursor.pos()
+        # 首先尝试非阻塞的 popup（更现代）
+        try:
+            self.tray_menu.popup(pos)
+        except Exception:
+            # 如果 popup 失效，作为兜底尝试阻塞式的 exec（某些平台更可靠）
+            try:
+                self.tray_menu.exec(pos)
+            except Exception as e:
+                print("弹出菜单失败：", e)
 
-    # 还原
-    def restore(self) -> None:
-        if not self._window.is_hidden:
-            print("[!] 当前没有隐藏的窗口，忽略")
-            return
+    def set_main(self):
+        self._settings_win = SettingWindow.SettingWindow()
+        self._settings_win.show()
 
-        print("[Restore] 正在关闭托盘图标...")
-        self._tray.hide()
-
-        print("[Restore] 正在还原窗口...")
-        hwnd = self._window.restore()
-        if hwnd is None:
-            print("[!] 原窗口已不存在")
-            return
-
-        if self._back_sound is not None:
-            back_to_sound(self._back_sound)
-            self._back_sound = None
-
-        if self._profile.auto_pause:
-            print("[Restore] 窗口已还原，稍后恢复播放...")
-            time.sleep(0.3)
-            toggle_play_pause()
-            print("[Restore] 播放已恢复")
-
-def main():
-    # 从存档读取触发方式和配置档案名
-    way = get_way()
-    profile_name = get_current_profile_name()
-
-    # 加载配置档案
-    dm = DataManager()
-    profile = dm.data.get(profile_name) or dm.data.get("default")
-
-    print(f"[Config] 触发方式: {way}")
-    print(f"[Config] 配置档案: {profile.name}")
-    print(f"[Config] 浏览器: {profile.browser_names}")
-    print(f"[Config] 自动暂停: {'开' if profile.auto_pause else '关'}")
-    print(f"[Config] 托盘图标: {'开' if profile.tray_icon_enabled else '关'}")
-
-    # 初始化模块
-    hider = MovieHider(profile)
-
-    # 根据 way 选择 events 实现
-    if way == "button":
-        run_button_mode(hider)
-    else:
-        run_hotkey_mode(hider, profile)
-
-
-def run_hotkey_mode(hider, profile):
-    """快捷键模式"""
-    events = InputsEvents(
-        hotkey_hide=profile.hotkey_hide,
-        hotkey_restore=profile.hotkey_restore,
-        on_hide=hider.hide,
-        on_restore=hider.restore,
-    )
-    events.start()
-
-    print("=" * 55)
-    print(f"  ClassMovieEasyWatch 已就绪  [{profile.name}]")
-    print(f"  {profile.hotkey_hide}   — 紧急隐藏（暂停 + 托盘）")
-    print(f"  {profile.hotkey_restore}  — 还原继续（窗口 + 播放）")
-    print("  托盘图标右键  — 还原 / 退出")
-    print("=" * 55)
-
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("\n正在退出...")
-    finally:
-        events.stop()
-        hider._tray.hide()
-        print("程序已退出。")
-
-
-def run_button_mode(hider):
-    """浮动按钮模式"""
-    from PySide6.QtWidgets import QApplication
-
-    app = QApplication(sys.argv)
-    app.setApplicationName("ClassMovieEasyWatch")
-    events = ButtonEvents(
-        on_hide=hider.hide,
-        on_restore=hider.restore,
-    )
-    events.start()
-
-    print("=" * 55)
-    print("  ClassMovieEasyWatch 已就绪  [浮动按钮模式]")
-    print("  点击屏幕上的浮动按钮进行隐藏 / 还原")
-    print("  托盘图标右键  — 还原 / 退出")
-    print("=" * 55)
-
-    try:
-        app.exec()
-        events.stop()
-    finally:
-        hider._tray.hide()
-        print("程序已退出。")
+    def start_main(self):
+        self._hider, self._events = StartMain.main()
 
 
 if __name__ == "__main__":
-    main()
+    app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
+
+    if not QSystemTrayIcon.isSystemTrayAvailable():
+        print("系统托盘不可用")
+        sys.exit(1)
+    else:
+        tray_icon = TrayIcon()
+        sys.exit(app.exec())

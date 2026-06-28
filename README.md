@@ -25,8 +25,24 @@
 
 ## 依赖安装
 
-本项目基于 Python 3.10+ 开发，依赖以下库(版本如下图所示)：
-![](/ReadMeNeed/屏幕截图%202026-06-23%20155458.png)
+pynput
+pywin32
+psutil
+pystray
+Pillow
+PySide6
+pycaw
+
+本项目基于 Python 3.10+ 开发，依赖以下库：
+| Package | Version   |
+|-|-|
+|pynput	|1.8.2|
+|pywin32|311|
+|psutil	|7.2.2|
+|pystray|0.19.5|
+|Pillow	|12.2.0|
+|PySide6|6.11.1|
+|pycaw	|20251023|
 
 通过requirements.txt直接安装
 

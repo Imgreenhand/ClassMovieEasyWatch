@@ -1,7 +1,7 @@
 {
+    "name": "default",
     "hotkey_hide": "<ctrl>+<alt>+q",
     "hotkey_restore": "<ctrl>+<alt>+<f9>",
     "browser_names": "msedge.exe",
-    "auto_pause": true,
-    "tray_icon_enabled": true
+    "auto_pause": true
 }

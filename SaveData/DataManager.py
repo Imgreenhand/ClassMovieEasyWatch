@@ -12,7 +12,6 @@ class Data:
     hotkey_restore: str = "<ctrl>+<alt>+<f9>"   # 还原热键
     browser_names: str = "msedge.exe"           # 目标浏览器进程名
     auto_pause: bool = True                     # 隐藏时自动暂停
-    tray_icon_enabled: bool = True              # 是否显示系统托盘图标
 
 class DataManager:
     """配置档案管理器，提供一个str, Data字典单例"""
@@ -51,10 +50,13 @@ class DataManager:
             try:
                 with open(str(file), "r", encoding = "utf-8") as f:
                     nj = json.load(f)
+                    # 以文件 stem 为准，确保内存中 name 与文件名一致
+                    nj["name"] = data_name
                     data_dict[data_name] = Data(**nj)
             except (json.JSONDecodeError, TypeError, KeyError) as e:
                 logging.error(f"加载文件 {file.name} 失败: {e}，已跳过")
                 continue
+        self.data = data_dict
         return data_dict
     
     def save(self, name: str) -> bool:
@@ -77,8 +79,7 @@ class DataManager:
                 hotkey_hide: str|None = None,
                 hotkey_restore: str|None = None,  
                 browser_names: str|None = None,  
-                auto_pause: bool|None = None,  
-                tray_icon_enabled: bool|None = None) -> bool:
+                auto_pause: bool|None = None) -> bool:
         """
         修改指定档案的配置项，只修改传入的非 None 参数
         修改后自动保存到硬盘
@@ -98,7 +99,5 @@ class DataManager:
             config.browser_names = browser_names
         if auto_pause is not None:
             config.auto_pause = auto_pause
-        if tray_icon_enabled is not None:
-            config.tray_icon_enabled = tray_icon_enabled
         # 修改完后，自动调用 save 持久化
         return self.save(name)
