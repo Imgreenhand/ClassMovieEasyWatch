@@ -32,18 +32,18 @@ KEYBOARD_ROWS = [
     [("Shift","shift",2.3),("Z","z",1),("X","x",1),("C","c",1),
      ("V","v",1),("B","b",1),("N","n",1),("M","m",1),(",",",",1),
      (".",".",1),("/","/",1),("Shift","shift",2.7)],
-    [("Ctrl","ctrl",1.3),("Win","win",1.3),("Alt","alt",1.3),
-     ("Space","space",5),("Alt","alt",1.3),("Win","win",1.3),
+    [("Ctrl","ctrl",1.3),("Win","cmd",1.3),("Alt","alt",1.3),
+     ("Space","space",5),("Alt","alt",1.3),("Win","cmd",1.3),
      ("Ctrl","ctrl",1.3)],
 ]
 
-MODIFIER_KEYS = {"ctrl", "alt", "shift", "win"}
+MODIFIER_KEYS = {"ctrl", "alt", "shift", "cmd"}
 # 需要用 <> 包裹的特殊键（pynput 规范）
 BRACKET_KEYS = {
     "f1","f2","f3","f4","f5","f6","f7","f8","f9","f10","f11","f12",
     "space","tab","enter","backspace","esc","caps_lock","delete",
     "up","down","left","right","home","end","page_up","page_down",
-    "insert","pause","print_screen",
+    "insert","pause","print_screen", "cmd",
 }
 
 
@@ -175,7 +175,8 @@ class VirtualKeyboard(QFrame):
         if not key:
             return ""
         key_str = f"<{key}>" if key in BRACKET_KEYS else key
-        return "+".join(f"<{m}>" for m in mods) + f"+{key_str}"
+        mod_part = "+".join(f"<{m}>" for m in mods)
+        return f"{mod_part}+{key_str}" if mod_part else key_str
 
     def _on_key_click(self, btn: KeyButton) -> None:
         if btn.is_modifier:
@@ -317,7 +318,7 @@ class SettingMainScroll(QFrame):
             config.hotkey_hide = hk
         else:
             config.hotkey_restore = hk
-        logging.info("热键已同步到内存: %s = %s", which, hk)
+        print("热键已同步到内存: %s = %s", which, hk)
 
     def _sync_appname_to_memory(self, text: str) -> None:
         config = self._get_current_config()

@@ -1,5 +1,12 @@
 from collections.abc import Callable
 from pynput import keyboard
+from PySide6.QtCore import QObject, Signal
+import logging
+
+
+class _Invoker(QObject):
+    """跨线程调用桥接器：在 pynput 线程 emit 信号，Qt 自动排队到主线程执行"""
+    invoke = Signal()
 
 
 class InputsEvents:
@@ -22,6 +29,10 @@ class InputsEvents:
         self._hotkey_restore = hotkey_restore
         self._listener: keyboard.GlobalHotKeys | None = None
         self._started = False
+        self._pending: Callable[[], None] | None = None
+        # 笔记：_Invoker 必须在此线程（主线程）创建，信号才能正确跨线程排队
+        self._invoker = _Invoker()
+        self._invoker.invoke.connect(self._on_invoke)
 
     # ── 热键属性（支持从 Profile 动态传入）──────────────────────
 
@@ -80,11 +91,30 @@ class InputsEvents:
 
     # ── 内部处理 ──────────────────────────────────────────────
 
+    def _on_invoke(self) -> None:
+        """信号槽回调：在主线程执行暂存的函数"""
+        if self._pending is not None:
+            self._pending()
+            self._pending = None
+
+    def _safe_call_in_mainthread(self, func: Callable[[], None]) -> None:
+        """把 func 调度到 Qt 主线程执行（线程安全）"""
+        self._pending = func
+        # 笔记：跨线程 emit 时 Qt 自动使用 QueuedConnection，将调用排队到主线程
+        self._invoker.invoke.emit()
+
     def _handle_hide(self):
+        """pynput 回调线程 -> 安全地把实际逻辑发到主线程执行"""
         if self._on_hide:
-            self._on_hide()
+            try:
+                self._safe_call_in_mainthread(self._on_hide)
+            except Exception:
+                logging.exception("_handle_hide 发生异常")
 
     def _handle_restore(self):
+        """pynput 回调线程 -> 安全地把实际逻辑发到主线程执行"""
         if self._on_restore:
-            self._on_restore()
-
+            try:
+                self._safe_call_in_mainthread(self._on_restore)
+            except Exception:
+                logging.exception("_handle_restore 发生异常")

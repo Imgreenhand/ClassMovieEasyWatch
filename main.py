@@ -1,4 +1,5 @@
 import sys
+import logging
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QWidget
 from PySide6.QtGui import QIcon, QAction, QCursor
 from PySide6.QtCore import QTimer
@@ -15,20 +16,25 @@ class TrayIcon(QSystemTrayIcon):
         self._hidden_widget.hide()
         self.tray_menu = QMenu(self._hidden_widget)
 
-        # 为 QAction 指定 parent，并把它们保存为实例属性以保留引用
-        self.set_action = QAction("设置", self.tray_menu)
-        self.set_action.triggered.connect(self.set_main)
-        self.about_action = QAction("关于", self.tray_menu)
-        self.start_action = QAction("开始", self.tray_menu)
-        self.start_action.triggered.connect(self.start_main)
-        self.quit_action = QAction("退出", self.tray_menu)
-        self.quit_action.triggered.connect(QApplication.instance().quit)
+        self._hider = None
+        self._events = None
 
+        # 为 QAction 指定 parent，并把它们保存为实例属性以保留引用
+        self.set_action = QAction("用户设置", self.tray_menu)
+        self.set_action.triggered.connect(self.set_main)
+        self.about_action = QAction("关于我们", self.tray_menu)
+        self.start_action = QAction("开始监听", self.tray_menu)
+        self.start_action.triggered.connect(self.start_main)
+        self.stop_action = QAction("结束监听", self.tray_menu)
+        self.stop_action.triggered.connect(self.stop_main)
+        self.quit_action = QAction("退出程序", self.tray_menu)
+        self.quit_action.triggered.connect(QApplication.instance().quit)
         self.tray_menu.addAction(self.set_action)
         self.tray_menu.addSeparator()
         self.tray_menu.addAction(self.about_action)
         self.tray_menu.addSeparator()
         self.tray_menu.addAction(self.start_action)
+        self.tray_menu.addAction(self.stop_action)
         self.tray_menu.addSeparator()
         self.tray_menu.addAction(self.quit_action)
 
@@ -65,6 +71,16 @@ class TrayIcon(QSystemTrayIcon):
 
     def start_main(self):
         self._hider, self._events = StartMain.main()
+
+    def stop_main(self):
+        """结束监听，如有隐藏窗口先还原"""
+        if self._events is None:
+            return
+        if self._hider is not None:
+            self._hider.restore()
+        self._events.stop()
+        self._events = None
+        self._hider = None
 
 
 if __name__ == "__main__":

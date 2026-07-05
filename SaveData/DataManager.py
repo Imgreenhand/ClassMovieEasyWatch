@@ -77,20 +77,17 @@ class DataManager:
     
     def change(self, name: str,
                 hotkey_hide: str|None = None,
-                hotkey_restore: str|None = None,  
-                browser_names: str|None = None,  
+                hotkey_restore: str|None = None,
+                browser_names: str|None = None,
                 auto_pause: bool|None = None) -> bool:
         """
         修改指定档案的配置项，只修改传入的非 None 参数
         修改后自动保存到硬盘
         """
-        # 检查档案是否存在
         if name not in self.data:
             logging.error(f"档案 '{name}' 不存在，无法修改")
             return False
-        # 拿到要修改的对象
         config = self.data[name]
-        # 逐一判断，只修改明确传入了新值的字段
         if hotkey_hide is not None:
             config.hotkey_hide = hotkey_hide
         if hotkey_restore is not None:
@@ -99,5 +96,4 @@ class DataManager:
             config.browser_names = browser_names
         if auto_pause is not None:
             config.auto_pause = auto_pause
-        # 修改完后，自动调用 save 持久化
         return self.save(name)
