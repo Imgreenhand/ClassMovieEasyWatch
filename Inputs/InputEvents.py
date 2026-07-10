@@ -80,14 +80,14 @@ class InputsEvents:
         })
         self._listener.start()
         self._started = True
-        print(f"[InputEvents] 全局热键已注册：{self._hotkey_hide} / {self._hotkey_restore}")
+        logging.info("[InputEvents] 全局热键已注册：%s / %s", self._hotkey_hide, self._hotkey_restore)
 
     def stop(self):
         """停止全局热键监听"""
         if self._listener:
             self._listener.stop()
         self._started = False
-        print("[InputEvents] 监听已停止")
+        logging.info("[InputEvents] 监听已停止")
 
     # ── 内部处理 ──────────────────────────────────────────────
 

@@ -6,6 +6,12 @@ from PySide6.QtCore import QTimer
 import StartMain
 import SettingWindow
 
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+
 class TrayIcon(QSystemTrayIcon):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -49,7 +55,7 @@ class TrayIcon(QSystemTrayIcon):
 
     def _on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         # 打印 reason 有助于排查（在不同平台上右键/左键可能映射不同）
-        print("Tray activated, reason =", reason)
+        logging.debug("Tray activated, reason = %s", reason)
         # 延迟到下一事件循环弹出，避免在信号回调中直接弹出失效
         QTimer.singleShot(0, lambda: self._popup_menu())
 
@@ -63,7 +69,7 @@ class TrayIcon(QSystemTrayIcon):
             try:
                 self.tray_menu.exec(pos)
             except Exception as e:
-                print("弹出菜单失败：", e)
+                logging.error("弹出菜单失败：%s", e)
 
     def set_main(self):
         self._settings_win = SettingWindow.SettingWindow()
@@ -88,7 +94,7 @@ if __name__ == "__main__":
     app.setQuitOnLastWindowClosed(False)
 
     if not QSystemTrayIcon.isSystemTrayAvailable():
-        print("系统托盘不可用")
+        logging.error("系统托盘不可用")
         sys.exit(1)
     else:
         tray_icon = TrayIcon()

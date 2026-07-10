@@ -243,6 +243,10 @@ class SettingWindow(QWidget):
             "hotkey_restore": "<ctrl>+<alt>+<f9>",
             "browser_names": "msedge.exe",
             "auto_pause": True,
+            "hotspot_width": 220,
+            "hotspot_height": 120,
+            "hotspot_x": 1.0,
+            "hotspot_y": 1.0,
         }
         try:
             SAVE_DIR.mkdir(parents=True, exist_ok=True)

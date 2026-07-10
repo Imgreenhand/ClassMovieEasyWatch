@@ -23,7 +23,7 @@ def send_appcommand_play_pause(hwnd: int) -> bool:
     try:
         lparam = (APPCOMMAND_MEDIA_PLAY_PAUSE << 16) | 0
         win32gui.PostMessage(hwnd, WM_APPCOMMAND, hwnd, lparam)
-        print(f"WM_APPCOMMAND PLAY_PAUSE 已发送到窗口 {hwnd}")
+        logging.info("WM_APPCOMMAND PLAY_PAUSE 已发送到窗口 %s", hwnd)
         return True
     except Exception as e:
         logging.error(f"send_appcommand_play_pause: 发送失败 {e}，尝试使用toggle_play_pause发送全局媒体键")

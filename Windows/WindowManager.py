@@ -34,7 +34,7 @@ class WindowManager:
 
         # 检查窗口是否还存在并尝试恢复
         for hwnd in hwnd_list:
-            print(f"[Windowmanager：restor]{hwnd}")
+            logging.debug("[WindowManager] 恢复窗口 %s", hwnd)
             if win32gui.IsWindow(hwnd):
                 try:
                     # 先用 ShowWindow 恢复窗口（非阻塞）
@@ -48,7 +48,7 @@ class WindowManager:
                     win32gui.SetForegroundWindow(hwnd)
                 except Exception as e:
                     # 打印诊断信息并尝试一个温和的后备方案
-                    print(f"[WindowManager] SetForegroundWindow 失败: {e}")
+                    logging.error("[WindowManager] SetForegroundWindow 失败: %s", e)
                     try:
                         # 尝试短暂置顶然后还原（有时能把窗口带到前台）
                         win32gui.SetWindowPos(hwnd, win32con.HWND_TOPMOST, 0,0,0,0,
@@ -57,6 +57,7 @@ class WindowManager:
                                               win32con.SWP_NOMOVE | win32con.SWP_NOSIZE)
                     except Exception:
                         # 忽略失败
+                        logging.error("[WindowManager] SetForegroundWindow 后备方案也失败了")
                         pass
 
         self._hidden_hwnd = None

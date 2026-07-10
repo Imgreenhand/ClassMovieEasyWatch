@@ -29,17 +29,17 @@ class MovieHider:
     def hide(self) -> None:
         now = time.time()
         if now - self._last_action_time < self._min_interval:
-            print("[防抖] 忽略重复的隐藏请求")
+            logging.warning("[防抖] 忽略重复的隐藏请求")
             return
         self._last_action_time = now
         if self._window.is_hidden:
-            print("[!] 已有窗口处于隐藏状态，忽略")
+            logging.warning("[!] 已有窗口处于隐藏状态，忽略")
             return
 
         # 先获取目标窗口句柄（尚未隐藏），以便快捷键模式精准发送
         hwnd_list = self._window.hider.return_hwnd()
         if not hwnd_list:
-            print("[!] 未能获取目标窗口，请确认浏览器正在前台播放视频")
+            logging.warning("[!] 未能获取目标窗口，请确认浏览器正在前台播放视频")
             return
         
         """for hwnd in hwnd_list:
@@ -59,12 +59,12 @@ class MovieHider:
     # 还原
     def restore(self) -> None:
         if not self._window.is_hidden:
-            print("[!] 当前没有隐藏的窗口，忽略")
+            logging.warning("[!] 当前没有隐藏的窗口，忽略")
             return
 
         hwnd = self._window.restore()
         if hwnd is None:
-            print("[!] 原窗口已不存在")
+            logging.warning("[!] 原窗口已不存在")
             return
 
         if self._back_sound is not None:
@@ -84,7 +84,7 @@ class MovieHider:
         for hwnd in hwnd_list:
             if win32gui.IsWindow(hwnd):
                 success = send_appcommand_play_pause(hwnd)
-                print(f"窗口 {hwnd} 发送结果: {success}")
+                logging.debug("窗口 %s 发送结果: %s", hwnd, success)
 
 def main():
     """初始化并返回 (MovieHider, events) 元组"""
@@ -129,6 +129,10 @@ def run_button_mode(hider):
     events = ButtonEvents(
         on_hide=hider.hide,
         on_restore=hider.restore,
+        hotspot_width=hider._profile.hotspot_width,
+        hotspot_height=hider._profile.hotspot_height,
+        hotspot_x=hider._profile.hotspot_x,
+        hotspot_y=hider._profile.hotspot_y,
     )
-    events.start() 
+    events.start()
     return events

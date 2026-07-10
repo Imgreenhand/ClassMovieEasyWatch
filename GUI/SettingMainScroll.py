@@ -12,7 +12,8 @@ from PySide6.QtWidgets import (
 )
 
 from SaveData.DataManager import DataManager
-
+from PySide6.QtCore import QRect, QPoint
+from PySide6.QtGui import QColor, QPainter, QPen, QMouseEvent
 SAVE_DIR = Path("SaveData")
 
 # ── 虚拟键盘布局：(显示文本, pynput值, 宽度比例) ──
@@ -195,6 +196,140 @@ class VirtualKeyboard(QFrame):
         self._current_label.setText(hk if hk else "未选择")
 
 
+class HotspotPreview(QFrame):
+    """热区位置预览组件：外层模拟屏幕比例，内层可拖拽矩形代表热区"""
+
+    PREVIEW_WIDTH = 320  # 预览区域固定宽度
+
+    def __init__(self, parent: QWidget | None = None,
+                 on_changed: Callable[[], None] | None = None):
+        super().__init__(parent)
+        self._on_changed = on_changed
+        self.setFixedWidth(self.PREVIEW_WIDTH + 16)
+        self.setStyleSheet("background: #ffffff; border: 1px solid #eee; border-radius: 6px;")
+        self.setCursor(Qt.OpenHandCursor)
+
+        self._hotspot_x: float = 1.0
+        self._hotspot_y: float = 1.0
+        self._hotspot_w_pct: float = 0.1   # 热区宽度占屏幕比例
+        self._hotspot_h_pct: float = 0.1   # 热区高度占屏幕比例
+        self._dragging = False
+        self._drag_offset = QPoint(0, 0)
+
+        # 从主屏幕获取比例
+        screen = QApplication.primaryScreen()
+        if screen:
+            size = screen.availableGeometry()
+            self._screen_w = size.width()
+            self._screen_h = size.height()
+        else:
+            self._screen_w = 1920
+            self._screen_h = 1080
+
+        self._preview_h = int(self.PREVIEW_WIDTH * self._screen_h / self._screen_w)
+        self.setFixedHeight(self._preview_h + 40)
+        self._preview_rect = QRect(8, 32, self.PREVIEW_WIDTH, self._preview_h)
+
+    def set_hotspot(self, width: int, height: int, x: float, y: float) -> None:
+        """设置热区宽高和归一化位置（0.0~1.0）"""
+        self._hotspot_x = max(0.0, min(1.0, x))
+        self._hotspot_y = max(0.0, min(1.0, y))
+        self._hotspot_w_pct = width / max(1, self._screen_w)
+        self._hotspot_h_pct = height / max(1, self._screen_h)
+        self.update()
+
+    def get_position(self) -> tuple[float, float]:
+        return self._hotspot_x, self._hotspot_y
+
+    def _hotspot_rect(self) -> QRect:
+        """返回热区矩形在预览区域中的位置"""
+        pr = self._preview_rect
+        hw = int(pr.width() * self._hotspot_w_pct)
+        hh = int(pr.height() * self._hotspot_h_pct)
+        # x=1.0 时热区右边缘贴预览区右边缘
+        hx = int(pr.x() + (pr.width() - hw) * self._hotspot_x)
+        hy = int(pr.y() + (pr.height() - hh) * self._hotspot_y)
+        return QRect(hx, hy, max(hw, 20), max(hh, 16))
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        # 屏幕预览区域（浅灰底）
+        painter.setBrush(QColor(245, 245, 245))
+        painter.setPen(QPen(QColor(220, 220, 220), 1))
+        painter.drawRect(self._preview_rect)
+
+        # 热区矩形（粉色半透明 + 选中框）
+        hr = self._hotspot_rect()
+        painter.setBrush(QColor(251, 114, 153, 100))
+        painter.setPen(QPen(QColor(251, 114, 153), 2))
+        painter.drawRect(hr)
+
+        # 标签文本
+        painter.setPen(QColor(136, 136, 136))
+        font = self.font()
+        font.setPointSize(8)
+        painter.setFont(font)
+        sw, sh = self._screen_w, self._screen_h
+        hw = int(sw * self._hotspot_w_pct)
+        hh = int(sh * self._hotspot_h_pct)
+        label = f"热区 {hw}×{hh}  — 拖拽调整位置"
+        painter.drawText(self._preview_rect.adjusted(0, -20, 0, -2),
+                         Qt.AlignLeft | Qt.AlignBottom, label)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        if event.button() != Qt.LeftButton:
+            return
+        if self._hotspot_rect().contains(event.pos()):
+            self._dragging = True
+            self._drag_offset = event.pos() - self._hotspot_rect().topLeft()
+            self.setCursor(Qt.ClosedHandCursor)
+        else:
+            super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        if not self._dragging:
+            # 鼠标在热区上时显示手型
+            if self._hotspot_rect().contains(event.pos()):
+                self.setCursor(Qt.OpenHandCursor)
+            else:
+                self.setCursor(Qt.ArrowCursor)
+            return
+
+        pr = self._preview_rect
+        hr = self._hotspot_rect()
+        # 热区左上角的有效范围
+        new_tl = event.pos() - self._drag_offset
+        min_x = pr.x()
+        max_x = pr.x() + pr.width() - hr.width()
+        min_y = pr.y()
+        max_y = pr.y() + pr.height() - hr.height()
+        clamped_x = max(min_x, min(max_x, new_tl.x()))
+        clamped_y = max(min_y, min(max_y, new_tl.y()))
+
+        # 反算归一化位置
+        range_x = pr.width() - hr.width()
+        range_y = pr.height() - hr.height()
+        if range_x > 0:
+            self._hotspot_x = (clamped_x - pr.x()) / range_x
+        else:
+            self._hotspot_x = 0.0
+        if range_y > 0:
+            self._hotspot_y = (clamped_y - pr.y()) / range_y
+        else:
+            self._hotspot_y = 0.0
+
+        self.update()
+        if self._on_changed:
+            self._on_changed()
+
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if self._dragging:
+            self._dragging = False
+            self.setCursor(Qt.OpenHandCursor if self._hotspot_rect().contains(event.pos()) else Qt.ArrowCursor)
+
+
 class SettingMainScroll(QFrame):
     """设置窗口主内容区域，管理热键/应用/个性化三个页面"""
 
@@ -264,6 +399,13 @@ class SettingMainScroll(QFrame):
             auto_cb = page.findChild(QCheckBox, "auto_pause")
             if auto_cb:
                 auto_cb.setChecked(data.get("auto_pause", True))
+            if hasattr(self, "_hotspot_preview"):
+                self._hotspot_preview.set_hotspot(
+                    data.get("hotspot_width", 220),
+                    data.get("hotspot_height", 120),
+                    data.get("hotspot_x", 1.0),
+                    data.get("hotspot_y", 1.0),
+                )
 
     def collect_data(self) -> dict:
         """收集所有页面表单数据为字典"""
@@ -272,6 +414,10 @@ class SettingMainScroll(QFrame):
             "hotkey_restore": "<ctrl>+<alt>+<f9>",
             "browser_names": "msedge.exe",
             "auto_pause": True,
+            "hotspot_width": 220,
+            "hotspot_height": 120,
+            "hotspot_x": 1.0,
+            "hotspot_y": 1.0,
         }
         if hasattr(self, "_kb_hide"):
             hk = self._kb_hide.get_hotkey()
@@ -293,6 +439,10 @@ class SettingMainScroll(QFrame):
             auto_cb = page.findChild(QCheckBox, "auto_pause")
             if auto_cb:
                 data["auto_pause"] = auto_cb.isChecked()
+            if hasattr(self, "_hotspot_preview"):
+                hx, hy = self._hotspot_preview.get_position()
+                data["hotspot_x"] = hx
+                data["hotspot_y"] = hy
 
         return data
 
@@ -318,7 +468,7 @@ class SettingMainScroll(QFrame):
             config.hotkey_hide = hk
         else:
             config.hotkey_restore = hk
-        print("热键已同步到内存: %s = %s", which, hk)
+        logging.info("热键已同步到内存: %s = %s", which, hk)
 
     def _sync_appname_to_memory(self, text: str) -> None:
         config = self._get_current_config()
@@ -329,6 +479,15 @@ class SettingMainScroll(QFrame):
         config = self._get_current_config()
         if config is not None:
             config.auto_pause = bool(state)
+
+    def _sync_hotspot_to_memory(self) -> None:
+        config = self._get_current_config()
+        if config is None:
+            return
+        if hasattr(self, "_hotspot_preview"):
+            hx, hy = self._hotspot_preview.get_position()
+            config.hotspot_x = hx
+            config.hotspot_y = hy
 
     def switch_page(self, name: str) -> None:
         """切换到指定页面，按需构建"""
@@ -483,6 +642,22 @@ class SettingMainScroll(QFrame):
         auto_cb.setChecked(True)
         layout.addWidget(auto_cb)
         auto_cb.stateChanged.connect(self._sync_autopause_to_memory)
+
+        # 热区预览
+        hotspot_title = QLabel("点击区域位置")
+        hotspot_title.setFont(QFont("微软雅黑", 12, QFont.Bold))
+        hotspot_title.setStyleSheet("color: #555; background: transparent; margin-top: 6px;")
+        layout.addWidget(hotspot_title)
+
+        self._hotspot_preview = HotspotPreview(
+            on_changed=lambda: self._sync_hotspot_to_memory()
+        )
+        layout.addWidget(self._hotspot_preview)
+
+        hotspot_hint = QLabel("拖拽粉色矩形调整热区在屏幕上的位置，保存后重新开始监听生效")
+        hotspot_hint.setFont(QFont("微软雅黑", 9))
+        hotspot_hint.setStyleSheet("color: #999; background: transparent; padding: 2px 0;")
+        layout.addWidget(hotspot_hint)
 
         layout.addStretch()
         page.hide()

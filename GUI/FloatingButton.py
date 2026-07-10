@@ -1,83 +1,144 @@
-import sys
 from collections.abc import Callable
-from PySide6.QtCore import Qt, QPoint, QRect
-from PySide6.QtGui import QGuiApplication, QPainter, QColor, QBrush, QFont
-from PySide6.QtWidgets import QWidget, QApplication, QPushButton
+from pynput import mouse
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QColor, QGuiApplication, QPainter
+from PySide6.QtWidgets import QApplication, QWidget
 
-class FloatingButton(QWidget):
-    def __init__(self, on_hide: Callable, on_restore: Callable = None):
-        super().__init__()
 
-        # === 1. 窗口属性设置 ===
-        # 设置窗口为无边框、工具窗口（不显示在任务栏）、始终置顶
-        self.setWindowFlags(
-            Qt.FramelessWindowHint |      # 无边框[reference:2]
-            Qt.Tool |                     # 不在任务栏显示
-            Qt.WindowStaysOnTopHint       # 窗口始终置顶
-        )
-        # 设置窗口背景透明[reference:3]
+class _HotspotOverlay(QWidget):
+    def __init__(self, width: int, height: int, x: float, y: float):
+        super().__init__(None, Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        # 设置初始窗口大小（宽120，高40）
-        self.resize(40, 40)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self._hotspot_x = x
+        self._hotspot_y = y
 
+        self.resize(width, height)
+        self._update_position()
+
+    def _update_position(self) -> None:
+        screen = QGuiApplication.primaryScreen()
+        if not screen:
+            return
+        geom = screen.availableGeometry()
+        range_x = geom.width() - self.width()
+        range_y = geom.height() - self.height()
+        pos_x = geom.x() + int(range_x * self._hotspot_x)
+        pos_y = geom.y() + int(range_y * self._hotspot_y)
+        self.move(pos_x, pos_y)
+
+    """def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setBrush(QColor(120, 120, 120, 110))
+        painter.setPen(Qt.NoPen)
+        painter.drawRect(self.rect())"""
+
+
+class FloatingButton:
+    """使用系统鼠标钩子，在屏幕指定区域触发隐藏/恢复切换。"""
+
+    def __init__(self, on_hide: Callable[[], None] | None = None,
+                 on_restore: Callable[[], None] | None = None,
+                 hotspot_width: int = 220, hotspot_height: int = 120,
+                 hotspot_x: float = 1.0, hotspot_y: float = 1.0):
         self._on_hide = on_hide
         self._on_restore = on_restore
-        self._is_hidden = False 
+        self._is_hidden_logic = False
+        self._listener = None
+        self._overlay = None
+        self._hotspot_width = hotspot_width
+        self._hotspot_height = hotspot_height
+        self._hotspot_x = hotspot_x
+        self._hotspot_y = hotspot_y
 
-        # === 2. 创建内部按钮 ===
-        self.button = QPushButton("隐藏", self)   # 初始文字“隐藏”
-        self.button.setGeometry(0, 0, 40, 40)
-        self.button.clicked.connect(self._toggle)   # 点击触发切换
+    def show(self) -> None:
+        if self._listener is None:
+            self._listener = mouse.Listener(on_click=self._on_click)
+            self._listener.start()
 
+        if self._overlay is None:
+            self._overlay = _HotspotOverlay(self._hotspot_width, self._hotspot_height,
+                                            self._hotspot_x, self._hotspot_y)
+            self._overlay.show()
+            self._overlay.raise_()
+            self._overlay.activateWindow()
+            self._overlay.repaint()
 
-        # 设置按钮样式（圆角、背景色、字体等）
-        self.button.setStyleSheet("""
-            QPushButton {
-                background-color: rgba(50, 150, 250, 200);
-                color: white;
-                border-radius: 10px;
-                font-size: 16px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: rgba(80, 180, 255, 230);
-            }
-            QPushButton:pressed {
-                background-color: rgba(30, 100, 200, 210);
-            }
-        """)
+            app = QApplication.instance()
+            if app is not None:
+                QTimer.singleShot(0, self._overlay.repaint)
 
-        # === 3. 窗口定位 ===
-        # 获取主屏幕的可用几何区域（排除任务栏等）[reference:4]
-        screen_geo = QGuiApplication.primaryScreen().availableGeometry()
-        # 计算窗口的x坐标：【屏幕宽度 - 窗口宽度】/ 2
-        x = (screen_geo.width() - self.width()) // 2
-        # 计算窗口的y坐标：【屏幕高度 - 窗口高度】
-        y = screen_geo.height() - self.height()
-        # 移动窗口到计算出的位置
-        self.move(x, y)
+    def close(self) -> None:
+        if self._listener is not None:
+            self._listener.stop()
+            self._listener = None
 
-    def _toggle(self):
-        """点击按钮时切换隐藏/恢复"""
-        if not self._is_hidden:
-            # 当前未隐藏 → 执行隐藏
-            if self._on_hide:
-                self._on_hide()
-            self._is_hidden = True
-            self.button.setText("恢复")
-        else:
-            # 当前已隐藏 → 执行恢复
+        if self._overlay is not None:
+            self._overlay.close()
+            self._overlay = None
+
+    def _on_click(self, x: int, y: int, button, pressed: bool):
+        if not pressed or button != mouse.Button.left:
+            return True
+
+        if self._is_hotspot(x, y):
+            self._toggle_logic()
+
+        return True
+
+    def _is_hotspot(self, x: int, y: int) -> bool:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        ptr = wintypes.POINT(x, y)
+        monitor = user32.MonitorFromPoint(ptr, 2)  # MONITOR_DEFAULTTONEAREST = 2
+
+        class RECT(ctypes.Structure):
+            _fields_ = [
+                ("left", ctypes.c_long),
+                ("top", ctypes.c_long),
+                ("right", ctypes.c_long),
+                ("bottom", ctypes.c_long),
+            ]
+
+        class MONITORINFO(ctypes.Structure):
+            _fields_ = [
+                ("cbSize", wintypes.DWORD),
+                ("rcMonitor", RECT),
+                ("rcWork", RECT),
+                ("dwFlags", wintypes.DWORD),
+            ]
+
+        info = MONITORINFO()
+        info.cbSize = ctypes.sizeof(MONITORINFO)
+        user32.GetMonitorInfoW(monitor, ctypes.byref(info))
+        work_rect = info.rcWork
+        work_w = work_rect.right - work_rect.left
+        work_h = work_rect.bottom - work_rect.top
+        range_x = work_w - self._hotspot_width
+        range_y = work_h - self._hotspot_height
+        hotspot_left = work_rect.left + int(range_x * self._hotspot_x)
+        hotspot_top = work_rect.top + int(range_y * self._hotspot_y)
+
+        in_horizontal_range = x >= hotspot_left and x <= hotspot_left + self._hotspot_width
+        in_vertical_range = y >= hotspot_top and y <= hotspot_top + self._hotspot_height
+        return in_horizontal_range and in_vertical_range
+
+    def _toggle_logic(self) -> None:
+        if self._is_hidden_logic:
             if self._on_restore:
-                self._on_restore()
-            self._is_hidden = False
-            self.button.setText("隐藏")
-
-    def paintEvent(self, event):
-        """重绘事件，用于绘制窗口的自定义背景"""
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)  # 抗锯齿
-        # 设置画笔为透明，不绘制边框
-        painter.setPen(Qt.NoPen)
-        # 填充窗口背景（可选，如果你的按钮完全覆盖了窗口，可以不填充）
-        painter.fillRect(self.rect(), QColor(0, 0, 0, 0))  # 完全透明
-        super().paintEvent(event)
+                try:
+                    self._on_restore()
+                except Exception:
+                    pass
+            self._is_hidden_logic = False
+        else:
+            if self._on_hide:
+                try:
+                    self._on_hide()
+                except Exception:
+                    pass
+            self._is_hidden_logic = True

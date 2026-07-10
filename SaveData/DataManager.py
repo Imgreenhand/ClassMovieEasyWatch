@@ -12,6 +12,10 @@ class Data:
     hotkey_restore: str = "<ctrl>+<alt>+<f9>"   # 还原热键
     browser_names: str = "msedge.exe"           # 目标浏览器进程名
     auto_pause: bool = True                     # 隐藏时自动暂停
+    hotspot_width: int = 220                    # 热区宽度（像素）
+    hotspot_height: int = 120                   # 热区高度（像素）
+    hotspot_x: float = 1.0                      # 热区水平位置 0.0~1.0（1.0=贴右边缘）
+    hotspot_y: float = 1.0                      # 热区垂直位置 0.0~1.0（1.0=贴底边缘）
 
 class DataManager:
     """配置档案管理器，提供一个str, Data字典单例"""
@@ -79,7 +83,11 @@ class DataManager:
                 hotkey_hide: str|None = None,
                 hotkey_restore: str|None = None,
                 browser_names: str|None = None,
-                auto_pause: bool|None = None) -> bool:
+                auto_pause: bool|None = None,
+                hotspot_width: int|None = None,
+                hotspot_height: int|None = None,
+                hotspot_x: float|None = None,
+                hotspot_y: float|None = None) -> bool:
         """
         修改指定档案的配置项，只修改传入的非 None 参数
         修改后自动保存到硬盘
@@ -96,4 +104,12 @@ class DataManager:
             config.browser_names = browser_names
         if auto_pause is not None:
             config.auto_pause = auto_pause
+        if hotspot_width is not None:
+            config.hotspot_width = hotspot_width
+        if hotspot_height is not None:
+            config.hotspot_height = hotspot_height
+        if hotspot_x is not None:
+            config.hotspot_x = hotspot_x
+        if hotspot_y is not None:
+            config.hotspot_y = hotspot_y
         return self.save(name)
