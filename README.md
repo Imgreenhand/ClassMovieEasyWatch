@@ -148,7 +148,7 @@ python main.py
 ---
 
 ## 项目结构
-
+```
 ClassMovieEasyWatch/
 ├── main.py                 # 入口：系统托盘、启动窗口
 ├── StartMain.py            # 核心：隐藏 / 还原流程编排
@@ -171,7 +171,7 @@ ClassMovieEasyWatch/
 │   ├── default.json        # 默认配置模板
 │   └── save.json           # 运行时状态
 └── About/                  # 关于页面内容
-
+```
 ---
 
 ## 开发进度
