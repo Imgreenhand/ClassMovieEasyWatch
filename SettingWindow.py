@@ -11,8 +11,9 @@ from PySide6.QtWidgets import (
 )
 from GUI.SettingMainScroll import SettingMainScroll
 from SaveData.DataManager import DataManager
+from SaveData.FindSave import get_data_dir
 
-SAVE_DIR = Path("SaveData")
+SAVE_DIR = get_data_dir()
 
 # ── 通用按钮样式：粉色边框白底 ──
 BTN_STYLE = """
@@ -247,6 +248,8 @@ class SettingWindow(QWidget):
             "hotspot_height": 120,
             "hotspot_x": 1.0,
             "hotspot_y": 1.0,
+            "pause_method": "appcommand",
+            "highlight_seconds": 3,
         }
         try:
             SAVE_DIR.mkdir(parents=True, exist_ok=True)
@@ -264,13 +267,34 @@ class SettingWindow(QWidget):
             self._profile_combo.setCurrentIndex(idx)
 
     def _on_save(self) -> None:
-        """保存当前配置，调用 DataManager.change 并发送系统通知"""
+        """收集表单数据并通过 DataManager.change 保存到磁盘"""
         name = self._profile_combo.currentText().strip()
         if not name or name == "save":
             return
 
+        data = self._main_scroll.collect_data()
+        dm = DataManager()
+        # 确保档案存在于内存中
+        if name not in dm.data:
+            dm.load()
+        if name not in dm.data:
+            QMessageBox.warning(self, "保存失败", f"配置档案 '{name}' 不存在")
+            return
+
         try:
-            ok = DataManager().save(name)
+            ok = dm.change(
+                name,
+                hotkey_hide=data.get("hotkey_hide"),
+                hotkey_restore=data.get("hotkey_restore"),
+                browser_names=data.get("browser_names"),
+                auto_pause=data.get("auto_pause"),
+                hotspot_width=data.get("hotspot_width"),
+                hotspot_height=data.get("hotspot_height"),
+                hotspot_x=data.get("hotspot_x"),
+                hotspot_y=data.get("hotspot_y"),
+                pause_method=data.get("pause_method"),
+                highlight_seconds=data.get("highlight_seconds"),
+            )
             if not ok:
                 QMessageBox.warning(self, "保存失败", f"配置档案 '{name}' 保存失败")
                 return

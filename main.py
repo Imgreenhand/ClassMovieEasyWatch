@@ -1,10 +1,14 @@
 import sys
+import shutil
 import logging
+from pathlib import Path
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QWidget
 from PySide6.QtGui import QIcon, QAction, QCursor
 from PySide6.QtCore import QTimer
 import StartMain
 import SettingWindow
+from GUI.AboutWindow import AboutWindow
+from SaveData.FindSave import get_data_dir
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -29,6 +33,7 @@ class TrayIcon(QSystemTrayIcon):
         self.set_action = QAction("用户设置", self.tray_menu)
         self.set_action.triggered.connect(self.set_main)
         self.about_action = QAction("关于我们", self.tray_menu)
+        self.about_action.triggered.connect(self.show_about)
         self.start_action = QAction("开始监听", self.tray_menu)
         self.start_action.triggered.connect(self.start_main)
         self.stop_action = QAction("结束监听", self.tray_menu)
@@ -75,6 +80,10 @@ class TrayIcon(QSystemTrayIcon):
         self._settings_win = SettingWindow.SettingWindow()
         self._settings_win.show()
 
+    def show_about(self):
+        self._about_win = AboutWindow()
+        self._about_win.show()
+
     def start_main(self):
         self._hider, self._events = StartMain.main()
 
@@ -89,7 +98,22 @@ class TrayIcon(QSystemTrayIcon):
         self._hider = None
 
 
+def _ensure_data_dir() -> None:
+    """首次运行时将项目内 default.json 和 save.json 复制到用户数据目录"""
+    data_dir = get_data_dir()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    template_dir = Path(__file__).parent / "SaveData"
+    for name in ("default.json", "save.json"):
+        src = template_dir / name
+        dst = data_dir / name
+        if src.exists() and not dst.exists():
+            shutil.copy2(src, dst)
+            logging.info("已复制模板文件: %s", name)
+
+
 if __name__ == "__main__":
+    _ensure_data_dir()
+
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
 

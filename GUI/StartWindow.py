@@ -6,8 +6,9 @@ from PySide6.QtWidgets import (
     QWidget, QApplication, QPushButton, QLabel,
     QComboBox, QFrame, QVBoxLayout, QHBoxLayout,
 )
+from SaveData.FindSave import get_data_dir
 
-SAVE_DIR = Path("SaveData")
+SAVE_DIR = get_data_dir()
 SAVE_FILE = SAVE_DIR / "save.json"
 
 BTN_STYLE = """
@@ -77,7 +78,7 @@ class StartWindow(QWidget):
 
         self._way_combo = QComboBox()
         self._way_combo.addItem("快捷键", "hotkey")
-        self._way_combo.addItem("浮动按钮", "button")
+        self._way_combo.addItem("鼠标控制", "button")
         self._way_combo.setFont(QFont("微软雅黑", 10))
         self._way_combo.setFixedWidth(180)
         self._way_combo.setStyleSheet("""

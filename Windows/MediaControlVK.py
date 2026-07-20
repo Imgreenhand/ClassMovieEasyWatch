@@ -20,15 +20,11 @@ def send_appcommand_play_pause(hwnd: int) -> bool:
     if not hwnd or not win32gui.IsWindow(hwnd):
         logging.warning(f"send_appcommand_play_pause: 无效窗口句柄 {hwnd}")
         return False
-    try:
-        lparam = (APPCOMMAND_MEDIA_PLAY_PAUSE << 16) | 0
-        win32gui.PostMessage(hwnd, WM_APPCOMMAND, hwnd, lparam)
-        logging.info("WM_APPCOMMAND PLAY_PAUSE 已发送到窗口 %s", hwnd)
-        return True
-    except Exception as e:
-        logging.error(f"send_appcommand_play_pause: 发送失败 {e}，尝试使用toggle_play_pause发送全局媒体键")
-        toggle_play_pause()
-        return False
+    
+    lparam = (APPCOMMAND_MEDIA_PLAY_PAUSE << 16) | 0
+    win32gui.PostMessage(hwnd, WM_APPCOMMAND, hwnd, lparam)
+    logging.info("WM_APPCOMMAND PLAY_PAUSE 已发送到窗口 %s", hwnd)
+    return True
 
 def toggle_play_pause() -> None:
     """旧方案：全局媒体暂停键，容易被其他应用劫持，不推荐"""
@@ -41,7 +37,7 @@ def _get_volume():
         return AudioUtilities.GetSpeakers().EndpointVolume
     except Exception:
         logging.error("获取音量接口失败", exc_info=True)
-        raise
+        return None
 
 
 def sound_to_zero() -> float:

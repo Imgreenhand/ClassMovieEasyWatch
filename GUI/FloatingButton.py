@@ -13,6 +13,7 @@ class _HotspotOverlay(QWidget):
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
         self._hotspot_x = x
         self._hotspot_y = y
+        self._highlighting = False
 
         self.resize(width, height)
         self._update_position()
@@ -28,12 +29,26 @@ class _HotspotOverlay(QWidget):
         pos_y = geom.y() + int(range_y * self._hotspot_y)
         self.move(pos_x, pos_y)
 
-    """def paintEvent(self, event) -> None:
+    def highlight(self, seconds: int) -> None:
+        """高亮显示 n 秒后自动消失，0 秒则不高亮"""
+        if seconds <= 0:
+            return
+        self._highlighting = True
+        self.update()
+        QTimer.singleShot(seconds * 1000, self._clear_highlight)
+
+    def _clear_highlight(self) -> None:
+        self._highlighting = False
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        if not self._highlighting:
+            return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.setBrush(QColor(120, 120, 120, 110))
+        painter.setBrush(QColor(251, 114, 153, 130))
         painter.setPen(Qt.NoPen)
-        painter.drawRect(self.rect())"""
+        painter.drawRect(self.rect())
 
 
 class FloatingButton:
@@ -42,7 +57,8 @@ class FloatingButton:
     def __init__(self, on_hide: Callable[[], None] | None = None,
                  on_restore: Callable[[], None] | None = None,
                  hotspot_width: int = 220, hotspot_height: int = 120,
-                 hotspot_x: float = 1.0, hotspot_y: float = 1.0):
+                 hotspot_x: float = 1.0, hotspot_y: float = 1.0,
+                 highlight_seconds: int = 3):
         self._on_hide = on_hide
         self._on_restore = on_restore
         self._is_hidden_logic = False
@@ -52,6 +68,7 @@ class FloatingButton:
         self._hotspot_height = hotspot_height
         self._hotspot_x = hotspot_x
         self._hotspot_y = hotspot_y
+        self._highlight_seconds = highlight_seconds
 
     def show(self) -> None:
         if self._listener is None:
@@ -69,6 +86,9 @@ class FloatingButton:
             app = QApplication.instance()
             if app is not None:
                 QTimer.singleShot(0, self._overlay.repaint)
+
+            if self._highlight_seconds > 0:
+                QTimer.singleShot(200, lambda: self._overlay.highlight(self._highlight_seconds))
 
     def close(self) -> None:
         if self._listener is not None:
@@ -131,14 +151,16 @@ class FloatingButton:
         if self._is_hidden_logic:
             if self._on_restore:
                 try:
-                    self._on_restore()
+                    ok = self._on_restore()
                 except Exception:
-                    pass
-            self._is_hidden_logic = False
+                    ok = False
+                if ok is not False:
+                    self._is_hidden_logic = False
         else:
             if self._on_hide:
                 try:
-                    self._on_hide()
+                    ok = self._on_hide()
                 except Exception:
-                    pass
-            self._is_hidden_logic = True
+                    ok = False
+                if ok is not False:
+                    self._is_hidden_logic = True

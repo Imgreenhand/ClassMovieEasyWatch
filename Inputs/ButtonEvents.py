@@ -16,7 +16,8 @@ class ButtonEvents:
 
     def __init__(self, on_hide: Callable[[], None] | None = None, on_restore: Callable[[], None] | None = None,
                  hotspot_width: int = 220, hotspot_height: int = 120,
-                 hotspot_x: float = 1.0, hotspot_y: float = 1.0):
+                 hotspot_x: float = 1.0, hotspot_y: float = 1.0,
+                 highlight_seconds: int = 3):
         self._on_hide = on_hide
         self._on_restore = on_restore
         self._button: FloatingButton | None = None
@@ -26,6 +27,7 @@ class ButtonEvents:
         self._hotspot_height = hotspot_height
         self._hotspot_x = hotspot_x
         self._hotspot_y = hotspot_y
+        self._highlight_seconds = highlight_seconds
 
     @property
     def on_hide(self):
@@ -59,7 +61,8 @@ class ButtonEvents:
         # 创建代理窗口：它会在任务栏生成一个（透明）图标，点击该图标将触发回调
         self._button = FloatingButton(on_hide=self._handle_hide, on_restore=self._handle_restore,
                                        hotspot_width=self._hotspot_width, hotspot_height=self._hotspot_height,
-                                       hotspot_x=self._hotspot_x, hotspot_y=self._hotspot_y)
+                                       hotspot_x=self._hotspot_x, hotspot_y=self._hotspot_y,
+                                       highlight_seconds=self._highlight_seconds)
         self._button.show()
         logging.info("[ButtonEvents] 任务栏代理窗口已显示")
 

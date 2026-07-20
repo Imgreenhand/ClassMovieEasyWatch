@@ -7,7 +7,6 @@
 
 课堂观影一键隐藏 / 还原工具  
 支持 **全局热键** 和 **浮动按钮** 两种触发方式，一键隐藏浏览器播放窗口并暂停视频，再次触发恢复窗口并继续播放。    
-但是浮动按钮还没想好怎么伪装。
 
 ---
 
@@ -17,7 +16,7 @@
 - **一键恢复**：还原窗口并继续播放。
 - **两种触发方式**：
   - **全局热键**（默认 `Ctrl+Alt+Q` 隐藏，`Ctrl+Alt+F9` 恢复）
-  - **浮动按钮**（屏幕上的半透明圆钮，点击切换隐藏/恢复）
+  - **鼠标控制**（屏幕上的半透明圆钮，点击切换隐藏/恢复）
 - **静音**：防止全局的暂停出现意外
 - **多配置档案**：通过 `SaveData/*.json` 轻松切换浏览器、热键等设置。
 - **系统托盘图标**：隐藏后托盘显示图标，支持右键还原或退出程序。
@@ -93,11 +92,17 @@ python main.py
 
 ```json
 {
+    "name": "default",
     "hotkey_hide": "<ctrl>+<alt>+q",
     "hotkey_restore": "<ctrl>+<alt>+<f9>",
     "browser_names": "msedge.exe",
     "auto_pause": true,
-    "tray_icon_enabled": true
+    "hotspot_width": 220,
+    "hotspot_height": 120,
+    "hotspot_x": 1.0,
+    "hotspot_y": 1.0,
+    "pause_method": "appcommand",
+    "highlight_seconds": 3
 }
 ```
 
@@ -144,15 +149,31 @@ python main.py
 
 ## 项目结构
 
-![](/ReadMeNeed/屏幕截图%202026-06-22%20201139.png)
-
-懒得打字了说是。
+ClassMovieEasyWatch/
+├── main.py                 # 入口：系统托盘、启动窗口
+├── StartMain.py            # 核心：隐藏 / 还原流程编排
+├── SettingWindow.py        # 设置窗口
+├── GUI/
+│   ├── StartWindow.py      # 开始窗口
+│   ├── SettingMainScroll.py # 设置主内容区
+│   ├── FloatingButton.py   # 浮动按钮组件
+│   └── Art/                # 图片资源
+├── Inputs/
+│   ├── InputEvents.py      # 热键监听
+│   └── ButtonEvents.py     # 鼠标控制监听（至于为什么叫button不要管。。。）
+├── Windows/
+│   ├── WindowManager.py    # 窗口隐藏 / 还原
+│   ├── GetWindow.py        # 获取目标窗口句柄
+│   └── MediaControlVK.py   # 媒体控制（暂停 / 播放）
+├── SaveData/
+│   ├── DataManager.py      # 配置档案管理器（单例）
+│   ├── FindSave.py         # 存档路径工具
+│   ├── default.json        # 默认配置模板
+│   └── save.json           # 运行时状态
+└── About/                  # 关于页面内容
 
 ---
 
 ## 开发进度
 
 - 核心功能已完成（Maybe?）但代码不够健壮。
-- 考虑把按钮模式换成一种更隐蔽的方式（比如说判断一个区域内的鼠标点击事件，或者说把按钮伪装成别的图标）
-
-**Enjoy your class movie time without worry!** 

@@ -3,6 +3,7 @@ import threading
 import logging
 from dataclasses import dataclass, asdict
 from pathlib import Path
+from .FindSave import get_data_dir
 
 @dataclass
 class Data:
@@ -16,6 +17,8 @@ class Data:
     hotspot_height: int = 120                   # 热区高度（像素）
     hotspot_x: float = 1.0                      # 热区水平位置 0.0~1.0（1.0=贴右边缘）
     hotspot_y: float = 1.0                      # 热区垂直位置 0.0~1.0（1.0=贴底边缘）
+    pause_method: str = "appcommand"             # 暂停方式：appcommand | keybd_event
+    highlight_seconds: int = 3                   # 热区高亮秒数（0=不高亮）
 
 class DataManager:
     """配置档案管理器，提供一个str, Data字典单例"""
@@ -45,7 +48,9 @@ class DataManager:
 
     def load(self) -> dict[str, Data]:
         data_dict: dict[str, Data] = {}
-        data_load = Path("SaveData") # 指定SaveData文件夹
+        data_load = get_data_dir()
+        if not data_load.exists():
+            return data_dict
         for file in data_load.rglob("*.json"):
             data_name = file.stem
             if data_name == "save":
@@ -67,7 +72,7 @@ class DataManager:
         if name not in self.data:
             logging.error(f"档案 '{name}' 不存在，无法保存")
             return False
-        data_load = Path(f"SaveData/{name}.json")
+        data_load = get_data_dir() / f"{name}.json"
         data_load.parent.mkdir(parents = True, exist_ok = True)
         # 如果没有父目录则创建父目录
         try:
@@ -87,7 +92,9 @@ class DataManager:
                 hotspot_width: int|None = None,
                 hotspot_height: int|None = None,
                 hotspot_x: float|None = None,
-                hotspot_y: float|None = None) -> bool:
+                hotspot_y: float|None = None,
+                pause_method: str|None = None,
+                highlight_seconds: int|None = None) -> bool:
         """
         修改指定档案的配置项，只修改传入的非 None 参数
         修改后自动保存到硬盘
@@ -112,4 +119,8 @@ class DataManager:
             config.hotspot_x = hotspot_x
         if hotspot_y is not None:
             config.hotspot_y = hotspot_y
+        if pause_method is not None:
+            config.pause_method = pause_method
+        if highlight_seconds is not None:
+            config.highlight_seconds = highlight_seconds
         return self.save(name)

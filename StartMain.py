@@ -8,7 +8,7 @@ from PySide6.QtCore import QEventLoop
 from Inputs.InputEvents import InputsEvents
 from Inputs.ButtonEvents import ButtonEvents
 from Windows.WindowManager import WindowManager
-from Windows.MediaControlVK import send_appcommand_play_pause, sound_to_zero, back_to_sound
+from Windows.MediaControlVK import send_appcommand_play_pause, toggle_play_pause, sound_to_zero, back_to_sound
 from SaveData.DataManager import DataManager
 from SaveData.FindSave import get_way, get_current_profile_name
 from GUI.StartWindow import StartWindow
@@ -26,21 +26,21 @@ class MovieHider:
         self._min_interval = 0.3  # 秒
 
     #隐藏
-    def hide(self) -> None:
+    def hide(self) -> bool:
         now = time.time()
         if now - self._last_action_time < self._min_interval:
             logging.warning("[防抖] 忽略重复的隐藏请求")
-            return
+            return False
         self._last_action_time = now
         if self._window.is_hidden:
             logging.warning("[!] 已有窗口处于隐藏状态，忽略")
-            return
+            return False
 
         # 先获取目标窗口句柄（尚未隐藏），以便快捷键模式精准发送
         hwnd_list = self._window.hider.return_hwnd()
         if not hwnd_list:
             logging.warning("[!] 未能获取目标窗口，请确认浏览器正在前台播放视频")
-            return
+            return False
         
         """for hwnd in hwnd_list:
             win32gui.SetForegroundWindow(hwnd)
@@ -52,20 +52,21 @@ class MovieHider:
 
         ok = self._window.hide_window()
         if not ok:
-            return
+            return False
 
         self._back_sound = sound_to_zero()
+        return True
 
     # 还原
-    def restore(self) -> None:
+    def restore(self) -> bool:
         if not self._window.is_hidden:
             logging.warning("[!] 当前没有隐藏的窗口，忽略")
-            return
+            return False
 
         hwnd = self._window.restore()
         if hwnd is None:
             logging.warning("[!] 原窗口已不存在")
-            return
+            return False
 
         if self._back_sound is not None:
             back_to_sound(self._back_sound)
@@ -78,11 +79,18 @@ class MovieHider:
         if self._profile.auto_pause:
             self._do_pause(hwnd)
             time.sleep(0.2)
+        return True
 
     def _do_pause(self, hwnd_list: list[int]) -> None:
-        """向目标窗口发送 WM_APPCOMMAND 媒体暂停/恢复切换"""
+        """根据配置档案的 pause_method 选择暂停方式"""
+        method = getattr(self._profile, "pause_method", "appcommand")
         for hwnd in hwnd_list:
-            if win32gui.IsWindow(hwnd):
+            if not win32gui.IsWindow(hwnd):
+                continue
+            if method == "keybd_event":
+                toggle_play_pause()
+                logging.debug("全局媒体键已发送")
+            else:
                 success = send_appcommand_play_pause(hwnd)
                 logging.debug("窗口 %s 发送结果: %s", hwnd, success)
 
@@ -133,6 +141,7 @@ def run_button_mode(hider):
         hotspot_height=hider._profile.hotspot_height,
         hotspot_x=hider._profile.hotspot_x,
         hotspot_y=hider._profile.hotspot_y,
+        highlight_seconds=hider._profile.highlight_seconds,
     )
     events.start()
     return events

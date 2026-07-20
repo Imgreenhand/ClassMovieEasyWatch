@@ -7,5 +7,7 @@
     "hotspot_width": 220,
     "hotspot_height": 120,
     "hotspot_x": 1.0,
-    "hotspot_y": 1.0
+    "hotspot_y": 1.0,
+    "pause_method": "appcommand",
+    "highlight_seconds": 3
 }

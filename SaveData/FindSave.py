@@ -1,10 +1,17 @@
 """读取 / 写入用户上一次的触发方式和Data"""
 
+import os
 import json
 from pathlib import Path
 from dataclasses import dataclass
 
-SAVE_FILE = Path("SaveData/save.json")
+
+def get_data_dir() -> Path:
+    """返回用户数据目录：%APPDATA%/ClassMovieEasyWatch/"""
+    return Path(os.environ["APPDATA"]) / "ClassMovieEasyWatch"
+
+
+SAVE_FILE = get_data_dir() / "save.json"
 
 @dataclass
 class Save:
