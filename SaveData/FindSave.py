@@ -1,9 +1,18 @@
 """读取 / 写入用户上一次的触发方式和Data"""
 
 import os
+import sys
 import json
 from pathlib import Path
 from dataclasses import dataclass
+
+
+def resource_path(relative_path: str) -> str:
+    """返回资源文件的绝对路径，兼容 PyInstaller 打包和开发环境"""
+    base = getattr(sys, "_MEIPASS", "")
+    if base:
+        return str(Path(base) / relative_path)
+    return str(Path(__file__).parent.parent / relative_path)
 
 
 def get_data_dir() -> Path:
@@ -11,7 +20,7 @@ def get_data_dir() -> Path:
     return Path(os.environ["APPDATA"]) / "ClassMovieEasyWatch"
 
 
-SAVE_FILE = get_data_dir() / "save.json"
+SAVE_FILE = get_data_dir() / "save.txt"
 
 @dataclass
 class Save:
@@ -19,14 +28,14 @@ class Save:
     save_file: str = "default"      # 当前激活的配置档案名
 
 def _read_save() -> dict:
-    """读取整个 save.json，失败时返回空字典"""
+    """读取整个 save.txt，失败时返回空字典"""
     try:
         return json.loads(SAVE_FILE.read_text(encoding="utf-8"))
     except Exception:
         return {}
 
 def _write_save(data: dict) -> None:
-    """写入 save.json"""
+    """写入 save.txt"""
     SAVE_FILE.parent.mkdir(parents=True, exist_ok=True)
     SAVE_FILE.write_text(json.dumps(data, indent=4, ensure_ascii=False), encoding="utf-8")
 

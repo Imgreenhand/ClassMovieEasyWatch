@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from SaveData.DataManager import DataManager, Data
-from SaveData.FindSave import get_data_dir
+from SaveData.FindSave import get_data_dir, resource_path
 from PySide6.QtCore import QRect, QPoint
 from PySide6.QtGui import QColor, QPainter, QPen, QMouseEvent
 SAVE_DIR = get_data_dir()
@@ -495,7 +495,7 @@ class SettingMainScroll(QFrame):
         outer.addStretch()
 
         # 底部图
-        bottom_pix = QPixmap("GUI/Art/2233Seting.png")
+        bottom_pix = QPixmap(resource_path("GUI/Art/2233Seting.png"))
         if not bottom_pix.isNull():
             bottom_label = QLabel()
             bottom_label.setPixmap(bottom_pix.scaledToWidth(240, Qt.SmoothTransformation))

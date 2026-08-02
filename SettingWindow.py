@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
 )
 from GUI.SettingMainScroll import SettingMainScroll
 from SaveData.DataManager import DataManager
-from SaveData.FindSave import get_data_dir
+from SaveData.FindSave import get_data_dir, resource_path
 
 SAVE_DIR = get_data_dir()
 
@@ -110,7 +110,7 @@ class SettingWindow(QWidget):
 
         # 图标
         icon_label = QLabel(self._topbar)
-        icon_pix = QPixmap("GUI/Art/Sign.svg")
+        icon_pix = QPixmap(resource_path("GUI/Art/Sign.svg"))
         if not icon_pix.isNull():
             icon_label.setPixmap(icon_pix.scaled(22, 22, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         icon_label.move(12, (bar_h - 22) // 2)
@@ -310,7 +310,7 @@ class SettingWindow(QWidget):
     def _show_saved_notification(self, name: str) -> None:
         """发送系统通知：配置已保存"""
         tray = QSystemTrayIcon(self)
-        icon = QIcon("GUI/Art/Sign.svg")
+        icon = QIcon(resource_path("GUI/Art/Sign.svg"))
         if icon.isNull():
             icon = self.style().standardIcon(self.style().SP_MessageBoxInformation)
         tray.setIcon(icon)

@@ -6,10 +6,10 @@ from PySide6.QtWidgets import (
     QWidget, QApplication, QPushButton, QLabel,
     QComboBox, QFrame, QVBoxLayout, QHBoxLayout,
 )
-from SaveData.FindSave import get_data_dir
+from SaveData.FindSave import get_data_dir, resource_path
 
 SAVE_DIR = get_data_dir()
-SAVE_FILE = SAVE_DIR / "save.json"
+SAVE_FILE = SAVE_DIR / "save.txt"
 
 BTN_STYLE = """
     QPushButton {
@@ -53,7 +53,7 @@ class StartWindow(QWidget):
         h_layout.setSpacing(0)
 
         # ── 左侧图片 ──
-        pix = QPixmap("GUI/Art/2233Start.png")
+        pix = QPixmap(resource_path("GUI/Art/2233Start.png"))
         self._image_label = QLabel()
         if not pix.isNull():
             self._image_label.setPixmap(pix.scaledToHeight(200, Qt.SmoothTransformation))
@@ -141,7 +141,7 @@ class StartWindow(QWidget):
             self._profile_combo.addItem("default")
 
     def _load_current_save(self) -> None:
-        """读取 save.json 预填下拉栏"""
+        """读取 save.txt 预填下拉栏"""
         data: dict = {}
         if SAVE_FILE.exists():
             try:
@@ -160,7 +160,7 @@ class StartWindow(QWidget):
             self._profile_combo.setCurrentIndex(idx)
 
     def _on_start_clicked(self) -> None:
-        """保存选择到 save.json，关闭窗口，触发回调"""
+        """保存选择到 save.txt，关闭窗口，触发回调"""
         way = self._way_combo.currentData()
         profile = self._profile_combo.currentText()
 

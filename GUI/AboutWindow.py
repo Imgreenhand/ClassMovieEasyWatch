@@ -1,6 +1,7 @@
 import re
 import logging
 from pathlib import Path
+from SaveData.FindSave import resource_path
 from PySide6.QtCore import Qt, QPoint
 from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
@@ -99,7 +100,7 @@ class AboutWindow(QWidget):
 
         # 图标
         icon_label = QLabel(self._topbar)
-        icon_pix = QPixmap("GUI/Art/Sign.svg")
+        icon_pix = QPixmap(resource_path("GUI/Art/Sign.svg"))
         if not icon_pix.isNull():
             icon_label.setPixmap(icon_pix.scaled(20, 20, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         icon_label.move(self.width() - 64, (bar_h - 20) // 2)

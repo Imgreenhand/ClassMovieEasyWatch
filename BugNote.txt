@@ -1,0 +1,32 @@
+1. 切到111.json时无法正确隐藏，但状态机改变，暂停和静音正常。
+同理，恢复时除热键冲突外，不能正常sendMessedge，无上报错误的Toast。
+2. 通知的界面文字没有自适应，还有INFO不要通知
+
+给AI的提示词：
+
+ClassMovieEasyWatch项目架构
+
+静态层级：
+
+【Entry Layer】 入口层（成员GUILogic和ListenLogic互不依赖，平级）
+
+-【GUILogic】提供向外界展示的PySide6窗口对象，在运行时出现异常，要触发Toast弹窗，由GUI层统一弹出，下层负责将错误上报
+
+-【ListenLogic】监听用户的两种输入，即热键触发事件（HotkeyEvents）或鼠标点击设定区域事件（MouseEvents）
+
+
+【Decision Layer】决策层（持有状态，编排顺序）
+
+-【FiniteStateMachine】持有状态值并进行防抖，收到【Entry Layer】 的指令后先交给它，由它决定是否将指令交给【Orchestrator】编排
+
+-【Orchestrator】若【FiniteStateMachine】放行，随后编排，例如：收到Hide指令后，编排器先调用音量静音 -> 再调用浏览器暂停 -> 最后调用窗口隐藏
+
+-【Interfaces】抽象执行层（只有方法签名，不关心线程），拥有决策层所需要的所有接口
+
+
+【Infrastructure Layer】基础设施层（提供线程池、跨线程信箱、具体工具），并实现决策层所定义的接口
+
+
+【Composition Root】组装层，上帝层，知晓所有层级的存在，负责组装业务逻辑，启动前要检查“资源是否存在”（比如：音频设备驱动在不在、浏览器窗口标题能不能找到），如果可以降级，弹出Toast并降级
+
+- main.py
