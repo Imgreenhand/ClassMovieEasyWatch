@@ -200,11 +200,11 @@ class App:
             for w in warnings:
                 self._gui.report_warning(w)
 
-            # 创建 ListenLogic
+            # 创建 ListenLogic（回调在每次操作时动态刷新配置）
             self._listen = ListenLogic(
                 mailbox=self._mailbox,
-                on_hide=self._orchestrator.handle_hide,
-                on_restore=self._orchestrator.handle_restore,
+                on_hide=self._make_hide_handler(),
+                on_restore=self._make_restore_handler(),
                 error_reporter=self._gui.report_error,
             )
 
@@ -226,11 +226,53 @@ class App:
 
             if ok:
                 mode_text = "热键" if mode == "hotkey" else "鼠标热区"
-                self._gui.report_info(f"监听已启动（{mode_text}模式，配置：{profile_name}）")
+                logging.info(f"监听已启动（{mode_text}模式，配置：{profile_name}）")
 
         except Exception:
             logging.error("App: 启动监听失败", exc_info=True)
             self._gui.report_error("启动监听时发生异常")
+
+    def _make_hide_handler(self):
+        """
+        返回一个闭包：每次调用时先从 ProfileStore 刷新配置，
+        再执行隐藏流程。确保设置界面的修改实时生效。
+        """
+
+        def _handler() -> bool:
+            try:
+                profile = self._profile_store.get_profile(self._current_profile_name)
+                if profile is not None:
+                    self._orchestrator.configure(
+                        browser_name=profile.browser_names,
+                        auto_pause=profile.auto_pause,
+                        pause_method=profile.pause_method,
+                    )
+            except Exception:
+                logging.error("App: 刷新配置失败，使用上次缓存值", exc_info=True)
+            return self._orchestrator.handle_hide()
+
+        return _handler
+
+    def _make_restore_handler(self):
+        """
+        返回一个闭包：每次调用时先从 ProfileStore 刷新配置，
+        再执行还原流程。
+        """
+
+        def _handler() -> bool:
+            try:
+                profile = self._profile_store.get_profile(self._current_profile_name)
+                if profile is not None:
+                    self._orchestrator.configure(
+                        browser_name=profile.browser_names,
+                        auto_pause=profile.auto_pause,
+                        pause_method=profile.pause_method,
+                    )
+            except Exception:
+                logging.error("App: 刷新配置失败，使用上次缓存值", exc_info=True)
+            return self._orchestrator.handle_restore()
+
+        return _handler
 
     def _on_stop_requested(self) -> None:
         """GUI 层发起"结束监听"请求"""

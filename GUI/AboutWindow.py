@@ -1,7 +1,7 @@
 import re
 import logging
 from pathlib import Path
-from SaveData.FindSave import resource_path
+from infrastructure.path_utils import resource_path
 from PySide6.QtCore import Qt, QPoint
 from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
@@ -306,10 +306,10 @@ def _md_to_html(md: str) -> str:
 
 def _inline(text: str) -> str:
     """处理行内格式：链接、粗体、行内代码"""
-    # 先处理 Markdown 链接 [text](url)
+    # 先转义 HTML 特殊字符，再应用 Markdown 转换
+    text = _escape(text)
     text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)",
                   r'<a href="\2" style="color:#fb7299; text-decoration:none;">\1</a>', text)
-    text = _escape(text)
     text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
     text = re.sub(r"`([^`]+)`", r'<code style="background:#f0f0f0; padding:1px 4px; '
                   r'border-radius:2px;">\1</code>', text)

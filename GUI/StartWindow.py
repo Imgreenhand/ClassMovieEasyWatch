@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QWidget, QApplication, QPushButton, QLabel,
     QComboBox, QFrame, QVBoxLayout, QHBoxLayout,
 )
-from SaveData.FindSave import get_data_dir, resource_path
+from infrastructure.path_utils import get_data_dir, resource_path
 
 SAVE_DIR = get_data_dir()
 SAVE_FILE = SAVE_DIR / "save.txt"

@@ -11,7 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtWidgets import (
-    QApplication, QSystemTrayIcon, QMenu, QWidget
+    QApplication, QSystemTrayIcon, QMenu, QWidget, QMessageBox,
 )
 from PySide6.QtGui import QIcon, QCursor,QAction
 from PySide6.QtCore import QTimer, QEventLoop
@@ -122,21 +122,20 @@ class GUILogic:
 
         return True
 
-    # ── Toast 错误上报 ──────────────────────────────────────
+    # ── 错误上报 ──────────────────────────────────────────
 
     def report_error(self, message: str) -> None:
-        """下层调用此方法将错误上报到 GUI 层，由 Toast 统一展示"""
+        """下层调用此方法将错误上报到 GUI 层，弹出 QMessageBox"""
         logging.error("GUILogic: 收到错误上报: %s", message)
-        self._toast.error(message)
+        try:
+            QMessageBox.critical(None, "错误", message)
+        except Exception:
+            logging.error("GUILogic: QMessageBox 弹出失败", exc_info=True)
 
     def report_warning(self, message: str) -> None:
-        """下层调用此方法将警告上报到 GUI 层"""
+        """下层调用此方法将警告上报到 GUI 层，弹出 Toast"""
         logging.warning("GUILogic: 收到警告上报: %s", message)
         self._toast.warning(message)
-
-    def report_info(self, message: str) -> None:
-        """下层调用此方法将信息上报到 GUI 层"""
-        self._toast.info(message)
 
     # ── 开始窗口 ────────────────────────────────────────────
 
@@ -170,13 +169,12 @@ class GUILogic:
             self._on_start(way, profile)
         except Exception:
             logging.error("GUILogic: 开始监听失败", exc_info=True)
-            self._toast.error("启动监听失败，请检查配置")
+            QMessageBox.critical(None, "错误", "启动监听失败，请检查配置")
 
     def _handle_stop(self) -> None:
         """托盘菜单：结束监听"""
         try:
             self._on_stop()
-            self._toast.info("监听已停止")
         except Exception:
             logging.error("GUILogic: 结束监听失败", exc_info=True)
 
@@ -187,7 +185,7 @@ class GUILogic:
             self._settings_win.show()
         except Exception:
             logging.error("GUILogic: 打开设置窗口失败", exc_info=True)
-            self._toast.error("无法打开设置窗口")
+            QMessageBox.critical(None, "错误", "无法打开设置窗口")
 
     def _show_about(self) -> None:
         """打开关于窗口"""
@@ -196,7 +194,7 @@ class GUILogic:
             self._about_win.show()
         except Exception:
             logging.error("GUILogic: 打开关于窗口失败", exc_info=True)
-            self._toast.error("无法打开关于窗口")
+            QMessageBox.critical(None, "错误", "无法打开关于窗口")
 
     def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         """系统托盘图标被点击时的兜底处理"""

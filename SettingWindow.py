@@ -2,16 +2,16 @@ import sys
 import json
 import logging
 from pathlib import Path
-from PySide6.QtCore import Qt, QPoint
-from PySide6.QtGui import QFont, QPixmap, QIcon
+from PySide6.QtCore import Qt, QPoint, QTimer, QPropertyAnimation
+from PySide6.QtGui import QFont, QPixmap, QColor
 from PySide6.QtWidgets import (
     QWidget, QApplication, QPushButton, QLabel,
     QComboBox, QScrollArea, QFrame, QVBoxLayout,
-    QSystemTrayIcon, QMessageBox,
+    QMessageBox, QGraphicsDropShadowEffect,
 )
 from GUI.SettingMainScroll import SettingMainScroll
-from SaveData.DataManager import DataManager
-from SaveData.FindSave import get_data_dir, resource_path
+from infrastructure.data_manager import ProfileStore
+from infrastructure.path_utils import get_data_dir, resource_path
 
 SAVE_DIR = get_data_dir()
 
@@ -94,6 +94,7 @@ class SettingWindow(QWidget):
         self._setup_topbar()
         self._setup_sidebar()
         self._setup_scroll_area()
+        self._setup_message_overlay()
 
         self._refresh_profile_list()
 
@@ -197,6 +198,53 @@ class SettingWindow(QWidget):
         self._scroll.setWidget(self._main_scroll)
 
     # ═══════════════════════════════════════════════════════
+    # 内联消息叠加层
+    # ═══════════════════════════════════════════════════════
+
+    def _setup_message_overlay(self) -> None:
+        """创建内容区上方的内联消息标签"""
+        self._msg_label = QLabel(self)
+        self._msg_label.setFont(QFont("微软雅黑", 12, QFont.Bold))
+        self._msg_label.setAlignment(Qt.AlignCenter)
+        self._msg_label.setStyleSheet("""
+            QLabel {
+                color: #FFB027;
+                background: rgba(45, 30, 15, 0.78);
+                border: 1px solid #FFB027;
+                border-radius: 20px;
+                padding: 8px 28px;
+            }
+        """)
+        self._msg_label.hide()
+
+        self._msg_timer = QTimer(self)
+        self._msg_timer.setSingleShot(True)
+        self._msg_timer.timeout.connect(self._hide_message)
+
+    def _show_inline_message(self, text: str, duration_ms: int = 3000) -> None:
+        """在内容区上方显示内联消息，自动消失"""
+        self._msg_label.setText(text)
+        self._msg_label.adjustSize()
+        # 定位：内容区顶部居中
+        sidebar_w = self._sidebar.width()
+        bar_h = self._bar_h
+        content_w = self.width() - sidebar_w
+        msg_w = self._msg_label.width()
+        self._msg_label.setGeometry(
+            sidebar_w + (content_w - msg_w) // 2,
+            bar_h + 12,
+            msg_w,
+            self._msg_label.height(),
+        )
+        self._msg_label.show()
+        self._msg_label.raise_()
+        self._msg_timer.start(duration_ms)
+
+    def _hide_message(self) -> None:
+        """隐藏消息标签"""
+        self._msg_label.hide()
+
+    # ═══════════════════════════════════════════════════════
     # 配置文件管理
     # ═══════════════════════════════════════════════════════
 
@@ -255,7 +303,7 @@ class SettingWindow(QWidget):
             SAVE_DIR.mkdir(parents=True, exist_ok=True)
             path = SAVE_DIR / f"{name}.json"
             path.write_text(json.dumps(default_data, indent=4, ensure_ascii=False), encoding="utf-8")
-            DataManager().load()
+            ProfileStore().reload()
         except OSError as e:
             logging.error(f"新建配置 {name} 失败: {e}")
             QMessageBox.warning(self, "创建失败", f"无法创建配置:\n{e}")
@@ -267,22 +315,22 @@ class SettingWindow(QWidget):
             self._profile_combo.setCurrentIndex(idx)
 
     def _on_save(self) -> None:
-        """收集表单数据并通过 DataManager.change 保存到磁盘"""
+        """收集表单数据并通过 ProfileStore.update_profile 保存到磁盘"""
         name = self._profile_combo.currentText().strip()
         if not name or name == "save":
             return
 
         data = self._main_scroll.collect_data()
-        dm = DataManager()
+        store = ProfileStore()
         # 确保档案存在于内存中
-        if name not in dm.data:
-            dm.load()
-        if name not in dm.data:
+        if store.get_profile(name) is None:
+            store.reload()
+        if store.get_profile(name) is None:
             QMessageBox.warning(self, "保存失败", f"配置档案 '{name}' 不存在")
             return
 
         try:
-            ok = dm.change(
+            ok = store.update_profile(
                 name,
                 hotkey_hide=data.get("hotkey_hide"),
                 hotkey_restore=data.get("hotkey_restore"),
@@ -303,24 +351,9 @@ class SettingWindow(QWidget):
             QMessageBox.critical(self, "保存异常", f"保存时发生错误:\n{e}")
             return
 
-        self._show_saved_notification(name)
+        self._show_inline_message(f"配置 '{name}' 已保存", 3000)
         self._refresh_profile_list()
         self._profile_combo.setCurrentText(name)
-
-    def _show_saved_notification(self, name: str) -> None:
-        """发送系统通知：配置已保存"""
-        tray = QSystemTrayIcon(self)
-        icon = QIcon(resource_path("GUI/Art/Sign.svg"))
-        if icon.isNull():
-            icon = self.style().standardIcon(self.style().SP_MessageBoxInformation)
-        tray.setIcon(icon)
-        tray.show()
-        tray.showMessage(
-            "ClassMovieEasyWatch",
-            f"配置 '{name}' 已保存",
-            QSystemTrayIcon.Information,
-            2000,
-        )
 
     # ═══════════════════════════════════════════════════════
     # 侧边栏点击
@@ -350,6 +383,15 @@ class SettingWindow(QWidget):
         self._sidebar.setGeometry(0, bar_h, sidebar_w, self.height() - bar_h)
         self._scroll.setGeometry(sidebar_w, bar_h,
                                  self.width() - sidebar_w, self.height() - bar_h)
+
+        # 若消息标签可见，重新定位
+        if self._msg_label.isVisible():
+            content_w = self.width() - sidebar_w
+            msg_w = self._msg_label.width()
+            self._msg_label.move(
+                sidebar_w + (content_w - msg_w) // 2,
+                bar_h + 12,
+            )
 
         super().resizeEvent(event)
 

@@ -11,8 +11,8 @@ from PySide6.QtWidgets import (
     QSpinBox, QSizePolicy, QListWidget, QListWidgetItem, QApplication,
 )
 
-from SaveData.DataManager import DataManager, Data
-from SaveData.FindSave import get_data_dir, resource_path
+from infrastructure.data_manager import ProfileStore, Profile
+from infrastructure.path_utils import get_data_dir, resource_path
 from PySide6.QtCore import QRect, QPoint
 from PySide6.QtGui import QColor, QPainter, QPen, QMouseEvent
 SAVE_DIR = get_data_dir()
@@ -504,26 +504,26 @@ class SettingMainScroll(QFrame):
             outer.addWidget(bottom_label)
 
     def load_profile(self, name: str) -> None:
-        """从磁盘重新加载到 DataManager 内存，再刷新所有已构建页面"""
+        """从磁盘重新加载到 ProfileStore 内存，再刷新所有已构建页面"""
         self._profile_name = name
-        dm = DataManager()
-        dm.load()
-        config = dm.data.get(name)
+        store = ProfileStore()
+        store.reload()
+        config = store.get_profile(name)
         if config is None:
-            # 兜底：直接读取文件构造 Data 对象
+            # 兜底：直接读取文件构造 Profile 对象
             path = SAVE_DIR / f"{name}.json"
             if path.exists():
                 try:
                     raw = json.loads(path.read_text(encoding="utf-8"))
                     raw["name"] = name
-                    config = Data(**raw)
+                    config = Profile(**raw)
                 except (json.JSONDecodeError, TypeError, OSError):
                     pass
         if config is not None:
             self._apply_config(config)
 
-    def _apply_config(self, config: Data) -> None:
-        """将 Data 对象的值填入所有已构建页面的 UI 控件，不读磁盘"""
+    def _apply_config(self, config: Profile) -> None:
+        """将 Profile 对象的值填入所有已构建页面的 UI 控件，不读磁盘"""
         if hasattr(self, "_kb_hide"):
             self._kb_hide.set_hotkey(config.hotkey_hide)
         if hasattr(self, "_kb_restore"):
@@ -591,19 +591,17 @@ class SettingMainScroll(QFrame):
 
         return data
 
-    # ── 实时同步：UI → DataManager 内存 ─────────────────────────
+    # ── 实时同步：UI → ProfileStore 内存 ─────────────────────────
 
     def _get_current_config(self):
-        """获取当前配置档案的 Data 对象，不存在则返回 None"""
-        dm = DataManager()
-        if self._profile_name not in dm.data:
-            return None
-        return dm.data[self._profile_name]
+        """获取当前配置档案的 Profile 对象，不存在则返回 None"""
+        store = ProfileStore()
+        return store.get_profile(self._profile_name)
 
     def _sync_hotkey_to_memory(self, which: str) -> None:
         config = self._get_current_config()
         if config is None:
-            logging.warning("_sync_hotkey_to_memory: 当前配置档案 %s 不在 DataManager 中", self._profile_name)
+            logging.warning("_sync_hotkey_to_memory: 当前配置档案 %s 不在 ProfileStore 中", self._profile_name)
             return
         kb = self._kb_hide if which == "hide" else self._kb_restore
         hk = kb.get_hotkey()
@@ -663,7 +661,7 @@ class SettingMainScroll(QFrame):
         self._content_layout.addWidget(page)
         page.show()
         self._current_page = name
-        # 新页面构建后从 DataManager 内存填充数据，无需读磁盘
+        # 新页面构建后从 ProfileStore 内存填充数据，无需读磁盘
         config = self._get_current_config()
         if config is not None:
             self._apply_config(config)

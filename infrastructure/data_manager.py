@@ -6,6 +6,7 @@
 
 import json
 import logging
+import threading
 from pathlib import Path
 from dataclasses import dataclass, asdict
 from decision.interfaces import IProfileStore
@@ -29,11 +30,27 @@ class Profile:
 
 
 class ProfileStore(IProfileStore):
-    """配置档案存取实现"""
+    """配置档案存取实现（线程安全单例）"""
+
+    _instance: "ProfileStore | None" = None
+    _lock = threading.Lock()
+
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._cache: dict[str, Profile] = {}
+                    cls._instance._loaded = False
+        return cls._instance
 
     def __init__(self):
-        self._cache: dict[str, Profile] = {}
-        self._load_all()
+        # 只加载一次
+        if not self._loaded:
+            with self._lock:
+                if not self._loaded:
+                    self._load_all()
+                    self._loaded = True
 
     # ── IProfileStore 实现 ────────────────────────────────
 
@@ -84,6 +101,10 @@ class ProfileStore(IProfileStore):
     def get_profile(self, name: str) -> Profile | None:
         """获取 Profile 对象（非字典）"""
         return self._cache.get(name)
+
+    def reload(self) -> None:
+        """从磁盘重新加载所有配置档案（用于外部修改后同步）"""
+        self._load_all()
 
     # ── 内部方法 ──────────────────────────────────────────
 
