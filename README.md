@@ -1,22 +1,22 @@
 ﻿# ClassMovieEasyWatch
 
-[](GUI/Art/Sign.svg)
+![](GUI/Art/Sign.svg)
 
 课堂观影一键隐藏 / 还原工具。支持全局热键和鼠标点击触发两种触发方式。
 
 >期末考试之后通常是一个需要放松的时间，比如在班上晚自习的时候看看电影之类的。。。但是知周所众，晚自习有老师巡堂。如果是在家里，我们通常可以按下Win + D将所有前台窗口最小化，但是在学校的一体机上就会出现一个问题：一体机是一个触屏设备，按快捷键还有些麻烦，因此这个项目拥有鼠标点击触发模式，为这个问题提供了一个可能的解决方案。
-[](GUI/Art/2233Seting.png)
+![](GUI/Art/2233Seting.png)
 
 ---
 ## 运行截图
 
-[](ReadMeNeed/MenuP.png)
+![](ReadMeNeed/MenuP.png)
 >菜单栏
-[](ReadMeNeed/StartP.png)
+![](ReadMeNeed/StartP.png)
 >开始监听
-[](ReadMeNeed/KeyP.png)
-[](ReadMeNeed/SettingP.png)
-[](ReadMeNeed/exeP.png)
+![](ReadMeNeed/KeyP.png)
+![](ReadMeNeed/SettingP.png)
+![](ReadMeNeed/exeP.png)
 >设置界面
 
 ## 功能
@@ -118,4 +118,4 @@ ClassMovieEasyWatch/
 
 ## 版本
 
-[v0.0.0](https://github.com/Imgreenhand/ClassMovieEasyWatch/releases) (2026-08) — 四层架构重构、配置热加载、Bug 修复
+[v0.0.0](https://github.com/Imgreenhand/ClassMovieEasyWatch/releases) (2026-08) — 初始版本发布
