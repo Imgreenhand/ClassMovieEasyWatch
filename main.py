@@ -23,7 +23,7 @@ logging.basicConfig(
 
 # ── 确保数据目录存在（首次运行复制模板） ──────────────────
 
-from infrastructure.path_utils import get_data_dir
+from infrastructure.path_utils import get_data_dir, resource_path
 
 
 def _ensure_data_dir() -> None:
@@ -31,7 +31,7 @@ def _ensure_data_dir() -> None:
     import shutil
     data_dir = get_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
-    template_dir = Path(__file__).parent / "SaveData"
+    template_dir = Path(resource_path("SaveData"))
     for name in ("default.json",):
         src = template_dir / name
         dst = data_dir / name
