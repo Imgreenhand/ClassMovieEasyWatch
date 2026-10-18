@@ -6,7 +6,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('GUI/Art/*', 'GUI/Art'),
+        ('GUI/Art', 'GUI/Art'),
         ('SaveData/default.json', 'SaveData'),
         ('About/*.md', 'About'),
     ],

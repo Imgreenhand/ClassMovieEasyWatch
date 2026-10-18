@@ -1,23 +1,35 @@
+"""设置窗口主内容区域：热键修改、应用名称、个性化设置三个页面。
+
+界面由卡片分组构成，所有图标来自 ``GUI/Art/icons`` 的矢量素材。
+数据读写仍沿用原来的 ProfileStore 流程：页面控件直接写入内存配置，
+点击顶栏保存后由 :class:`SettingWindow` 落盘。
+"""
+
+from __future__ import annotations
+
 import json
-import winreg
 import logging
+import winreg
 from collections.abc import Callable
 from pathlib import Path
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont, QPixmap
+
+from PySide6.QtCore import Qt, QRect, QPoint, QSize
+from PySide6.QtGui import (
+    QFont, QPixmap, QPainter, QPen, QColor, QMouseEvent, QPainterPath,
+)
 from PySide6.QtWidgets import (
     QWidget, QPushButton, QLabel, QFrame, QVBoxLayout,
     QHBoxLayout, QGridLayout, QCheckBox, QLineEdit, QComboBox,
     QSpinBox, QSizePolicy, QListWidget, QListWidgetItem, QApplication,
 )
 
+from GUI import theme
 from infrastructure.data_manager import ProfileStore, Profile
 from infrastructure.path_utils import get_data_dir, resource_path
-from PySide6.QtCore import QRect, QPoint
-from PySide6.QtGui import QColor, QPainter, QPen, QMouseEvent
+
 SAVE_DIR = get_data_dir()
 
-# ── 虚拟键盘布局：(显示文本, pynput值, 宽度比例) ──
+# ── 虚拟键盘布局：（显示文本, pynput值, 宽度比例） ──
 KEYBOARD_ROWS = [
     [("F1","f1",1),("F2","f2",1),("F3","f3",1),("F4","f4",1),
      ("F5","f5",1),("F6","f6",1),("F7","f7",1),("F8","f8",1),
@@ -49,6 +61,116 @@ BRACKET_KEYS = {
 }
 
 
+# ══════════════════════════════════════════════════════════
+# 通用小组件
+# ══════════════════════════════════════════════════════════
+
+def make_card(parent: QWidget | None = None) -> tuple[QFrame, QVBoxLayout]:
+    """创建一个白底圆角卡片，返回卡片与其纵向布局"""
+    card = QFrame(parent)
+    card.setObjectName("card")
+    card.setStyleSheet(
+        f"QFrame#card {{ background: {theme.BG}; border: 1px solid {theme.BORDER};"
+        f" border-radius: 12px; }}"
+    )
+    layout = QVBoxLayout(card)
+    layout.setContentsMargins(16, 14, 16, 16)
+    layout.setSpacing(10)
+    return card, layout
+
+
+def make_icon_label(name: str, size: int = 16, color: str = theme.PINK) -> QLabel:
+    """生成一个只显示矢量图标的 QLabel"""
+    label = QLabel()
+    label.setFixedSize(size, size)
+    label.setStyleSheet("background: transparent; border: none;")
+    try:
+        label.setPixmap(theme.icon_pixmap(name, size, color))
+    except FileNotFoundError:
+        label.hide()
+    return label
+
+
+def make_section_head(icon_name: str, title: str, desc: str = "") -> QWidget:
+    """卡片内的标题行：图标 + 标题 + 灰色说明"""
+    head = QWidget()
+    head.setStyleSheet("background: transparent; border: none;")
+    layout = QVBoxLayout(head)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(3)
+
+    row = QHBoxLayout()
+    row.setContentsMargins(0, 0, 0, 0)
+    row.setSpacing(8)
+    row.addWidget(make_icon_label(icon_name, 16))
+
+    title_label = QLabel(title)
+    title_label.setFont(QFont(theme.FONT_FAMILY, 10, QFont.Bold))
+    title_label.setStyleSheet(f"color: {theme.TEXT}; background: transparent; border: none;")
+    row.addWidget(title_label)
+    row.addStretch()
+    layout.addLayout(row)
+
+    if desc:
+        text = QLabel(desc)
+        text.setFont(QFont(theme.FONT_FAMILY, 8))
+        text.setWordWrap(True)
+        text.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; background: transparent; border: none;"
+        )
+        layout.addWidget(text)
+    return head
+
+
+def make_hint(text: str, icon_name: str = "bolt") -> QWidget:
+    """浅色提示条：图标 + 说明文字"""
+    box = QFrame()
+    box.setObjectName("hintBox")
+    box.setStyleSheet(
+        f"QFrame#hintBox {{ background: {theme.PINK_SOFT}; border: 1px solid #ffeaf1;"
+        f" border-radius: 8px; }}"
+    )
+    layout = QHBoxLayout(box)
+    layout.setContentsMargins(12, 8, 12, 8)
+    layout.setSpacing(8)
+    layout.addWidget(make_icon_label(icon_name, 14, theme.PINK), 0, Qt.AlignTop)
+
+    label = QLabel(text)
+    label.setFont(QFont(theme.FONT_FAMILY, 8))
+    label.setWordWrap(True)
+    label.setStyleSheet(
+        f"color: {theme.TEXT_SUB}; background: transparent; border: none;"
+    )
+    layout.addWidget(label, 1)
+    return box
+
+
+def make_page_header(title: str, desc: str) -> QWidget:
+    """页面顶部标题区"""
+    head = QWidget()
+    head.setStyleSheet("background: transparent; border: none;")
+    layout = QVBoxLayout(head)
+    layout.setContentsMargins(0, 0, 0, 2)
+    layout.setSpacing(3)
+
+    title_label = QLabel(title)
+    title_label.setFont(QFont(theme.FONT_FAMILY, 12, QFont.Bold))
+    title_label.setStyleSheet(f"color: {theme.TEXT}; background: transparent; border: none;")
+    layout.addWidget(title_label)
+
+    desc_label = QLabel(desc)
+    desc_label.setFont(QFont(theme.FONT_FAMILY, 8))
+    desc_label.setStyleSheet(
+        f"color: {theme.TEXT_MUTED}; background: transparent; border: none;"
+    )
+    layout.addWidget(desc_label)
+    return head
+
+
+# ══════════════════════════════════════════════════════════
+# 虚拟键盘
+# ══════════════════════════════════════════════════════════
+
 class KeyButton(QPushButton):
     """虚拟键盘上的单个按键"""
 
@@ -57,8 +179,8 @@ class KeyButton(QPushButton):
         self.key_val = key_val
         self.is_modifier = key_val in MODIFIER_KEYS
         self._active = False
-        self.setFont(QFont("微软雅黑", 8))
-        self.setFixedHeight(28)
+        self.setFont(QFont(theme.FONT_FAMILY, 9))
+        self.setFixedHeight(26)
         self.setCursor(Qt.PointingHandCursor)
         self._update_style()
 
@@ -71,20 +193,34 @@ class KeyButton(QPushButton):
 
     def _update_style(self) -> None:
         if self._active:
-            self.setStyleSheet("""
-                QPushButton {
-                    background: #fb7299; color: #fff; border: 1px solid #e55a80;
-                    border-radius: 3px; font-weight: bold;
-                }
-            """)
+            self.setStyleSheet(
+                f"""
+                QPushButton {{
+                    background: {theme.PINK};
+                    color: {theme.TEXT_INVERT};
+                    border: 1px solid {theme.PINK};
+                    border-radius: 6px;
+                    font-weight: bold;
+                }}
+                """
+            )
         else:
-            self.setStyleSheet("""
-                QPushButton {
-                    background: #f5f5f5; color: #333; border: 1px solid #ddd;
-                    border-radius: 3px;
-                }
-                QPushButton:hover { background: #ffe0ea; border-color: #fb7299; }
-            """)
+            self.setStyleSheet(
+                f"""
+                QPushButton {{
+                    background: {theme.BG};
+                    color: {theme.TEXT};
+                    border: 1px solid {theme.BORDER};
+                    border-radius: 6px;
+                }}
+                QPushButton:hover {{
+                    background: {theme.PINK_LIGHT};
+                    border-color: {theme.PINK_EDGE};
+                    color: {theme.PINK_DEEP};
+                }}
+                QPushButton:pressed {{ background: {theme.PINK_EDGE}; }}
+                """
+            )
 
 
 class VirtualKeyboard(QFrame):
@@ -94,39 +230,59 @@ class VirtualKeyboard(QFrame):
                  on_changed: Callable[[], None] | None = None):
         super().__init__(parent)
         self._on_changed = on_changed
-        self.setStyleSheet("background: #ffffff; border: 1px solid #eee; border-radius: 6px;")
+        self.setStyleSheet(
+            f"QFrame {{ background: {theme.BG}; border: 1px solid {theme.BORDER};"
+            f" border-radius: 12px; }}"
+        )
 
         self._mod_btns: dict[str, KeyButton] = {}
         self._main_key_btn: KeyButton | None = None
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 8, 10, 10)
-        layout.setSpacing(5)
+        layout.setContentsMargins(12, 10, 12, 12)
+        layout.setSpacing(7)
 
-        # 标题 + 当前选择显示
+        # ── 标题行：图标 + 名称 + 当前组合 + 清空 ──
         header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.setSpacing(8)
+
+        header.addWidget(make_icon_label("keyboard", 16))
+
         title_label = QLabel(title)
-        title_label.setFont(QFont("微软雅黑", 11, QFont.Bold))
-        title_label.setStyleSheet("color: #fb7299; background: transparent; border: none;")
+        title_label.setFont(QFont(theme.FONT_FAMILY, 10, QFont.Bold))
+        title_label.setStyleSheet(f"color: {theme.TEXT}; background: transparent; border: none;")
         header.addWidget(title_label)
 
         self._current_label = QLabel("未选择")
-        self._current_label.setFont(QFont("微软雅黑", 10))
+        self._current_label.setFont(QFont(theme.FONT_FAMILY, 9))
         self._current_label.setStyleSheet(
-            "color: #333; background: #fafafa; border: 1px solid #eee; "
-            "border-radius: 4px; padding: 2px 10px;"
+            f"color: {theme.PINK_DEEP}; background: {theme.PINK_LIGHT};"
+            f" border: 1px solid {theme.PINK_EDGE}; border-radius: 10px;"
+            " padding: 2px 10px;"
         )
         header.addWidget(self._current_label)
         header.addStretch()
+
+        self._btn_clear = QPushButton()
+        self._btn_clear.setIcon(theme.icon("clear", 14, theme.TEXT_SUB))
+        self._btn_clear.setIconSize(QSize(14, 14))
+        self._btn_clear.setFixedSize(26, 26)
+        self._btn_clear.setCursor(Qt.PointingHandCursor)
+        self._btn_clear.setStyleSheet(theme.ghost_button_qss(26, radius=6))
+        self._btn_clear.setToolTip("清空当前组合")
+        self._btn_clear.clicked.connect(self.clear)
+        header.addWidget(self._btn_clear)
+
         layout.addLayout(header)
 
-        # 键盘网格
+        # ── 键盘网格 ──
         for row_data in KEYBOARD_ROWS:
             row_widget = QWidget()
             row_widget.setStyleSheet("background: transparent;")
             row_layout = QHBoxLayout(row_widget)
             row_layout.setContentsMargins(0, 0, 0, 0)
-            row_layout.setSpacing(2)
+            row_layout.setSpacing(3)
             for display, key_val, wf in row_data:
                 btn = KeyButton(display, key_val)
                 btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -136,6 +292,19 @@ class VirtualKeyboard(QFrame):
                 if key_val in MODIFIER_KEYS and key_val not in self._mod_btns:
                     self._mod_btns[key_val] = btn
             layout.addWidget(row_widget)
+
+    # ── 数据 ──
+
+    def clear(self) -> None:
+        """清空所有按键选择"""
+        for btn in self._mod_btns.values():
+            btn.set_active(False)
+        if self._main_key_btn:
+            self._main_key_btn.set_active(False)
+            self._main_key_btn = None
+        self._update_label()
+        if self._on_changed:
+            self._on_changed()
 
     def set_hotkey(self, hotkey_str: str) -> None:
         """根据 '<ctrl>+<alt>+<f9>' 格式设置键盘状态"""
@@ -180,6 +349,8 @@ class VirtualKeyboard(QFrame):
         mod_part = "+".join(f"<{m}>" for m in mods)
         return f"{mod_part}+{key_str}" if mod_part else key_str
 
+    # ── 交互 ──
+
     def _on_key_click(self, btn: KeyButton) -> None:
         if btn.is_modifier:
             btn.set_active(not btn.active())
@@ -194,21 +365,41 @@ class VirtualKeyboard(QFrame):
 
     def _update_label(self) -> None:
         hk = self.get_hotkey()
-        self._current_label.setText(hk if hk else "未选择")
+        if hk:
+            self._current_label.setText(hk)
+            self._current_label.setStyleSheet(
+                f"color: {theme.PINK_DEEP}; background: {theme.PINK_LIGHT};"
+                f" border: 1px solid {theme.PINK_EDGE}; border-radius: 10px;"
+                " padding: 2px 10px;"
+            )
+        else:
+            self._current_label.setText("未选择")
+            self._current_label.setStyleSheet(
+                f"color: {theme.TEXT_MUTED}; background: {theme.BG_SIDEBAR};"
+                f" border: 1px solid {theme.BORDER}; border-radius: 10px;"
+                " padding: 2px 10px;"
+            )
 
+
+# ══════════════════════════════════════════════════════════
+# 热区预览
+# ══════════════════════════════════════════════════════════
 
 class HotspotPreview(QFrame):
     """热区位置与大小预览组件：外层模拟屏幕比例，内层可拖拽（移动+调整大小）"""
 
-    PREVIEW_WIDTH = 320
+    PREVIEW_WIDTH = 400
     _GRAB = 6  # 边缘吸附像素
 
     def __init__(self, parent: QWidget | None = None,
                  on_changed: Callable[[], None] | None = None):
         super().__init__(parent)
         self._on_changed = on_changed
-        self.setFixedWidth(self.PREVIEW_WIDTH + 16)
-        self.setStyleSheet("background: #ffffff; border: 1px solid #eee; border-radius: 6px;")
+        self.setObjectName("hotspotPreview")
+        self.setStyleSheet(
+            f"QFrame#hotspotPreview {{ background: {theme.BG_SIDEBAR};"
+            f" border: 1px solid {theme.BORDER}; border-radius: 12px; }}"
+        )
         self.setMouseTracking(True)
 
         self._hotspot_x: float = 1.0
@@ -232,8 +423,10 @@ class HotspotPreview(QFrame):
             self._screen_h = 1080
 
         self._preview_h = int(self.PREVIEW_WIDTH * self._screen_h / self._screen_w)
-        self.setFixedHeight(self._preview_h + 40)
-        self._preview_rect = QRect(8, 32, self.PREVIEW_WIDTH, self._preview_h)
+        self._preview_h = max(120, min(240, self._preview_h))
+        self.setFixedWidth(self.PREVIEW_WIDTH + 40)
+        self.setFixedHeight(self._preview_h + 76)
+        self._preview_rect = QRect(20, 40, self.PREVIEW_WIDTH, self._preview_h)
 
     # ── 公开方法 ────────────────────────────────────────────
 
@@ -304,37 +497,71 @@ class HotspotPreview(QFrame):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # 屏幕预览区域（浅灰底）
-        painter.setBrush(QColor(245, 245, 245))
-        painter.setPen(QPen(QColor(220, 220, 220), 1))
-        painter.drawRect(self._preview_rect)
+        pr = self._preview_rect
 
-        # 热区矩形
+        # 屏幕预览区：圆角浅灰底 + 细边
+        screen_path = QPainterPath()
+        screen_path.addRoundedRect(pr, 8, 8)
+        painter.fillPath(screen_path, QColor(247, 245, 246))
+        painter.setPen(QPen(QColor(232, 226, 229), 1))
+        painter.drawPath(screen_path)
+
+        # 屏幕内的参考网格
+        painter.setPen(QPen(QColor(236, 231, 234), 1, Qt.DashLine))
+        for i in range(1, 3):
+            x = pr.x() + pr.width() * i // 3
+            y = pr.y() + pr.height() * i // 3
+            painter.drawLine(x, pr.y() + 4, x, pr.bottom() - 4)
+            painter.drawLine(pr.x() + 4, y, pr.right() - 4, y)
+
+        # 热区：圆角矩形 + 四角手柄
         hr = self._hotspot_rect()
-        painter.setBrush(QColor(251, 114, 153, 100))
+        hot_path = QPainterPath()
+        hot_path.addRoundedRect(hr, 5, 5)
+        painter.fillPath(hot_path, QColor(251, 114, 153, 46))
         painter.setPen(QPen(QColor(251, 114, 153), 2))
-        painter.drawRect(hr)
+        painter.drawPath(hot_path)
 
-        # 四角拖拽手柄
-        handle_size = 6
-        painter.setBrush(QColor(251, 114, 153, 180))
+        painter.setBrush(QColor(251, 114, 153))
         painter.setPen(Qt.NoPen)
         for cx, cy in [(hr.left(), hr.top()), (hr.right(), hr.top()),
-                        (hr.left(), hr.bottom()), (hr.right(), hr.bottom())]:
-            painter.drawRect(QRect(cx - handle_size // 2, cy - handle_size // 2,
-                                   handle_size, handle_size))
+                       (hr.left(), hr.bottom()), (hr.right(), hr.bottom())]:
+            painter.drawEllipse(QPoint(cx, cy), 4, 4)
 
-        # 标签文本
-        painter.setPen(QColor(136, 136, 136))
-        font = self.font()
-        font.setPointSize(8)
-        painter.setFont(font)
+        # 顶部：标题 + 尺寸胶囊
+        title_font = QFont(theme.FONT_FAMILY, 8)
+        painter.setFont(title_font)
+        painter.setPen(QColor(139, 128, 134))
+        painter.drawText(
+            QRect(pr.x(), 14, pr.width(), 20),
+            Qt.AlignLeft | Qt.AlignVCenter, "屏幕预览",
+        )
+
         sw, sh = self._screen_w, self._screen_h
         hw = int(sw * self._hotspot_w_pct)
         hh = int(sh * self._hotspot_h_pct)
-        label = f"热区 {hw}×{hh}  — 拖拽内部移动，拖拽边缘调整大小"
-        painter.drawText(self._preview_rect.adjusted(0, -20, 0, -2),
-                         Qt.AlignLeft | Qt.AlignBottom, label)
+        pill_text = f"{hw} × {hh}"
+        pill_font = QFont(theme.FONT_FAMILY, 8, QFont.Bold)
+        painter.setFont(pill_font)
+        metrics = painter.fontMetrics()
+        pill_w = metrics.horizontalAdvance(pill_text) + 20
+        pill_rect = QRect(pr.right() - pill_w, 13, pill_w, 20)
+        pill_path = QPainterPath()
+        pill_path.addRoundedRect(pill_rect, 10, 10)
+        painter.fillPath(pill_path, QColor(255, 240, 244))
+        painter.setPen(QPen(QColor(255, 224, 234), 1))
+        painter.drawPath(pill_path)
+        painter.setPen(QColor(216, 85, 123))
+        painter.drawText(pill_rect, Qt.AlignCenter, pill_text)
+
+        # 底部说明
+        painter.setFont(title_font)
+        painter.setPen(QColor(182, 171, 177))
+        painter.drawText(
+            QRect(pr.x(), pr.bottom() + 8, pr.width(), 20),
+            Qt.AlignLeft | Qt.AlignVCenter,
+            "拖拽内部移动，拖拽边缘或四角调整大小",
+        )
 
     # ── 鼠标事件 ────────────────────────────────────────────
 
@@ -461,12 +688,16 @@ class HotspotPreview(QFrame):
             self._on_changed()
 
 
+# ══════════════════════════════════════════════════════════
+# 主内容区
+# ══════════════════════════════════════════════════════════
+
 class SettingMainScroll(QFrame):
     """设置窗口主内容区域，管理热键/应用/个性化三个页面"""
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
-        self.setStyleSheet("background: #ffffff;")
+        self.setStyleSheet("background: transparent;")
 
         self._pages: dict[str, QWidget] = {}
         self._current_page: str = ""
@@ -484,8 +715,10 @@ class SettingMainScroll(QFrame):
         self._content_layout.setContentsMargins(0, 0, 0, 0)
 
         self._placeholder = QLabel("请从左侧选择设置项")
-        self._placeholder.setFont(QFont("微软雅黑", 13))
-        self._placeholder.setStyleSheet("color: #bbb; background: transparent;")
+        self._placeholder.setFont(QFont(theme.FONT_FAMILY, 12))
+        self._placeholder.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; background: transparent;"
+        )
         self._placeholder.setAlignment(Qt.AlignCenter)
         self._content_layout.addWidget(self._placeholder)
 
@@ -494,13 +727,15 @@ class SettingMainScroll(QFrame):
         # 弹性空间把底部图推到底部
         outer.addStretch()
 
-        # 底部图
+        # 底部插画
         bottom_pix = QPixmap(resource_path("GUI/Art/2233Seting.png"))
         if not bottom_pix.isNull():
             bottom_label = QLabel()
-            bottom_label.setPixmap(bottom_pix.scaledToWidth(240, Qt.SmoothTransformation))
+            bottom_label.setPixmap(
+                bottom_pix.scaledToWidth(200, Qt.SmoothTransformation)
+            )
             bottom_label.setAlignment(Qt.AlignCenter)
-            bottom_label.setStyleSheet("background: transparent;")
+            bottom_label.setStyleSheet("background: transparent; padding: 6px 0 10px 0;")
             outer.addWidget(bottom_label)
 
     def load_profile(self, name: str) -> None:
@@ -677,12 +912,22 @@ class SettingMainScroll(QFrame):
             return self._build_personal_page()
         return QWidget()
 
-    def _build_hotkey_page(self) -> QWidget:
+    def _new_page(self, object_name: str) -> tuple[QWidget, QVBoxLayout]:
+        """创建带内边距的页面容器"""
         page = QWidget(self)
-        page.setObjectName("hotkey")
+        page.setObjectName(object_name)
+        page.setStyleSheet("background: transparent;")
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(8, 6, 8, 6)
-        layout.setSpacing(8)
+        layout.setContentsMargins(24, 18, 24, 18)
+        layout.setSpacing(12)
+        return page, layout
+
+    def _build_hotkey_page(self) -> QWidget:
+        page, layout = self._new_page("hotkey")
+
+        layout.addWidget(make_page_header(
+            "热键修改", "点击修饰键（Ctrl / Alt / Shift / Win）后再点一个普通键即可组合快捷键",
+        ))
 
         self._kb_hide = VirtualKeyboard("隐藏快捷键", on_changed=lambda: self._sync_hotkey_to_memory("hide"))
         self._kb_hide.setObjectName("kb_hide")
@@ -692,49 +937,46 @@ class SettingMainScroll(QFrame):
         self._kb_restore.setObjectName("kb_restore")
         layout.addWidget(self._kb_restore)
 
-        hint = QLabel("点击修饰键切换，再点击一个普通键组合快捷键")
-        hint.setFont(QFont("微软雅黑", 9))
-        hint.setStyleSheet("color: #999; background: transparent; padding: 2px 0;")
-        layout.addWidget(hint)
+        layout.addWidget(make_hint(
+            "修改后点击右上角保存生效；正在监听时，建议重新开始监听以确保热键已刷新。",
+            "bolt",
+        ))
 
         layout.addStretch()
         page.hide()
         return page
 
     def _build_app_page(self) -> QWidget:
-        page = QWidget(self)
-        page.setObjectName("appname")
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(8, 6, 8, 6)
-        layout.setSpacing(8)
+        page, layout = self._new_page("appname")
 
-        label = QLabel("目标应用进程名：")
-        label.setFont(QFont("微软雅黑", 11))
-        label.setStyleSheet("color: #333; background: transparent;")
-        layout.addWidget(label)
+        layout.addWidget(make_page_header(
+            "应用名称", "指定需要隐藏的浏览器进程名，多个进程可用英文逗号分隔",
+        ))
+
+        # ── 进程名输入 ──
+        card, card_layout = make_card()
+        card_layout.addWidget(make_section_head(
+            "profile", "目标应用进程名", "例如 msedge.exe 或 chrome.exe",
+        ))
 
         app_input = QLineEdit()
         app_input.setObjectName("app_input")
         app_input.setPlaceholderText("输入进程名，如 msedge.exe")
-        app_input.setFont(QFont("微软雅黑", 10))
-        app_input.setStyleSheet("""
-            QLineEdit {
-                border: 1px solid #ddd; border-radius: 4px; padding: 5px 10px;
-                color: #333; background: #fff;
-            }
-            QLineEdit:focus { border-color: #fb7299; }
-        """)
-        layout.addWidget(app_input)
+        app_input.setFont(QFont(theme.FONT_FAMILY, 10))
+        app_input.setFixedHeight(36)
+        app_input.setStyleSheet(theme.line_edit_qss(height=34))
+        card_layout.addWidget(app_input)
         app_input.textChanged.connect(self._sync_appname_to_memory)
+        layout.addWidget(card)
 
-        # 常用浏览器快捷按钮
-        quick_label = QLabel("常用浏览器（点击选择）：")
-        quick_label.setFont(QFont("微软雅黑", 10))
-        quick_label.setStyleSheet("color: #888; background: transparent;")
-        layout.addWidget(quick_label)
+        # ── 常用浏览器 ──
+        quick_card, quick_layout = make_card()
+        quick_layout.addWidget(make_section_head(
+            "search", "常用浏览器", "点击任意条目快速填入进程名",
+        ))
 
         grid = QGridLayout()
-        grid.setSpacing(5)
+        grid.setSpacing(8)
         browsers = [
             ("Edge", "msedge.exe"), ("Chrome", "chrome.exe"),
             ("Firefox", "firefox.exe"), ("Brave", "brave.exe"),
@@ -742,130 +984,121 @@ class SettingMainScroll(QFrame):
         ]
         for i, (disp, exe) in enumerate(browsers):
             btn = QPushButton(disp)
-            btn.setFont(QFont("微软雅黑", 9))
-            btn.setStyleSheet("""
-                QPushButton {
-                    background: #fff; border: 1px solid #ddd; border-radius: 4px;
-                    color: #333; padding: 4px 12px;
-                }
-                QPushButton:hover { border-color: #fb7299; background: #fff0f4; }
-            """)
+            btn.setFont(QFont(theme.FONT_FAMILY, 9))
+            btn.setFixedHeight(30)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setStyleSheet(theme.chip_button_qss(height=30, font_size=9))
+            btn.setToolTip(exe)
             btn.clicked.connect(lambda checked, e=exe: app_input.setText(e))
             grid.addWidget(btn, i // 3, i % 3)
-        layout.addLayout(grid)
+        quick_layout.addLayout(grid)
+        layout.addWidget(quick_card)
 
-        # 扫描已安装应用
-        scan_label = QLabel("已安装应用（点击选择）：")
-        scan_label.setFont(QFont("微软雅黑", 10))
-        scan_label.setStyleSheet("color: #888; background: transparent;")
-        layout.addWidget(scan_label)
+        # ── 已安装应用 ──
+        scan_card, scan_layout = make_card()
+        scan_layout.addWidget(make_section_head(
+            "apps", "已安装应用", "从系统注册表读取，点击条目即可填入进程名",
+        ))
 
         self._app_list = QListWidget()
-        self._app_list.setFont(QFont("微软雅黑", 9))
-        self._app_list.setMaximumHeight(160)
-        self._app_list.setStyleSheet("""
-            QListWidget {
-                border: 1px solid #eee; border-radius: 4px; color: #333;
-                background: #fafafa;
-            }
-            QListWidget::item:hover { background: #fff0f4; }
-            QListWidget::item:selected { background: #fb7299; color: #fff; }
-        """)
+        self._app_list.setFont(QFont(theme.FONT_FAMILY, 9))
+        self._app_list.setMaximumHeight(180)
+        self._app_list.setStyleSheet(theme.list_qss())
         self._app_list.itemClicked.connect(
             lambda item: app_input.setText(item.data(Qt.UserRole))
         )
         self._scan_installed_apps()
-        layout.addWidget(self._app_list)
+        scan_layout.addWidget(self._app_list)
+        layout.addWidget(scan_card)
 
         layout.addStretch()
         page.hide()
         return page
 
     def _build_personal_page(self) -> QWidget:
-        page = QWidget(self)
-        page.setObjectName("personal")
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(8, 6, 8, 6)
-        layout.setSpacing(10)
+        page, layout = self._new_page("personal")
 
-        title = QLabel("个性化设置")
-        title.setFont(QFont("微软雅黑", 13, QFont.Bold))
-        title.setStyleSheet("color: #fb7299; background: transparent;")
-        layout.addWidget(title)
+        layout.addWidget(make_page_header(
+            "个性化设置", "调整隐藏时的媒体行为与鼠标热区",
+        ))
+
+        # ── 媒体行为 ──
+        media_card, media_layout = make_card()
+        media_layout.addWidget(make_section_head(
+            "toggle", "媒体播放", "隐藏窗口时的音频处理方式",
+        ))
 
         auto_cb = QCheckBox("隐藏窗口时自动暂停媒体播放")
         auto_cb.setObjectName("auto_pause")
-        auto_cb.setFont(QFont("微软雅黑", 11))
-        auto_cb.setStyleSheet("color: #333; background: transparent; spacing: 8px;")
+        auto_cb.setFont(QFont(theme.FONT_FAMILY, 10))
+        auto_cb.setStyleSheet(theme.checkbox_qss(10))
+        auto_cb.setCursor(Qt.PointingHandCursor)
         auto_cb.setChecked(True)
-        layout.addWidget(auto_cb)
         auto_cb.stateChanged.connect(self._sync_autopause_to_memory)
+        media_layout.addWidget(auto_cb)
 
-        # 暂停方式选择
-        pause_layout = QHBoxLayout()
-        pause_label = QLabel("暂停方式：")
-        pause_label.setFont(QFont("微软雅黑", 11))
-        pause_label.setStyleSheet("color: #333; background: transparent;")
-        pause_layout.addWidget(pause_label)
+        pause_row = QHBoxLayout()
+        pause_row.setContentsMargins(0, 0, 0, 0)
+        pause_row.setSpacing(10)
+
+        pause_label = QLabel("暂停方式")
+        pause_label.setFont(QFont(theme.FONT_FAMILY, 10))
+        pause_label.setStyleSheet(
+            f"color: {theme.TEXT_SUB}; background: transparent; border: none;"
+        )
+        pause_row.addWidget(pause_label)
+
         self._pause_combo = QComboBox()
         self._pause_combo.setObjectName("pause_method")
         self._pause_combo.addItem("WM_APPCOMMAND（推荐，精准发送到窗口）", "appcommand")
         self._pause_combo.addItem("全局媒体键（备用，可能被其他应用截获）", "keybd_event")
-        self._pause_combo.setFont(QFont("微软雅黑", 10))
-        self._pause_combo.setStyleSheet("""
-            QComboBox {
-                background: #ffffff; color: #333; border: 1px solid #ddd;
-                border-radius: 4px; padding: 3px 8px;
-            }
-            QComboBox:hover { border-color: #fb7299; }
-            QComboBox QAbstractItemView {
-                background: #ffffff; color: #333; selection-background-color: #fff0f4;
-                outline: none;
-            }
-        """)
-        pause_layout.addWidget(self._pause_combo, 1)
-        layout.addLayout(pause_layout)
+        self._pause_combo.setFont(QFont(theme.FONT_FAMILY, 10))
+        self._pause_combo.setFixedHeight(34)
+        self._pause_combo.setCursor(Qt.PointingHandCursor)
+        self._pause_combo.setStyleSheet(theme.combo_qss(height=32))
         self._pause_combo.currentIndexChanged.connect(self._sync_pausemethod_to_memory)
+        pause_row.addWidget(self._pause_combo, 1)
+        media_layout.addLayout(pause_row)
+        layout.addWidget(media_card)
 
-        # 热区高亮秒数
-        hl_layout = QHBoxLayout()
-        hl_label = QLabel("热区高亮时长（秒）：")
-        hl_label.setFont(QFont("微软雅黑", 11))
-        hl_label.setStyleSheet("color: #333; background: transparent;")
-        hl_layout.addWidget(hl_label)
+        # ── 热区设置 ──
+        hotspot_card, hotspot_layout = make_card()
+        hotspot_layout.addWidget(make_section_head(
+            "hotspot", "鼠标热区", "选择鼠标控制模式时，点击该区域即可触发隐藏与还原",
+        ))
+
+        hl_row = QHBoxLayout()
+        hl_row.setContentsMargins(0, 0, 0, 0)
+        hl_row.setSpacing(10)
+
+        hl_label = QLabel("热区高亮时长")
+        hl_label.setFont(QFont(theme.FONT_FAMILY, 10))
+        hl_label.setStyleSheet(
+            f"color: {theme.TEXT_SUB}; background: transparent; border: none;"
+        )
+        hl_row.addWidget(hl_label)
+
         self._highlight_spin = QSpinBox()
         self._highlight_spin.setObjectName("highlight_seconds")
         self._highlight_spin.setRange(0, 30)
         self._highlight_spin.setValue(3)
         self._highlight_spin.setSuffix(" 秒")
-        self._highlight_spin.setFont(QFont("微软雅黑", 10))
-        self._highlight_spin.setStyleSheet("""
-            QSpinBox {
-                border: 1px solid #ddd; border-radius: 4px; padding: 3px 6px;
-                color: #333; background: #fff;
-            }
-            QSpinBox:focus { border-color: #fb7299; }
-        """)
-        hl_layout.addWidget(self._highlight_spin)
-        hl_layout.addStretch()
-        layout.addLayout(hl_layout)
+        self._highlight_spin.setFont(QFont(theme.FONT_FAMILY, 10))
+        self._highlight_spin.setFixedSize(120, 34)
+        self._highlight_spin.setStyleSheet(theme.spin_qss(height=32))
         self._highlight_spin.valueChanged.connect(self._sync_highlight_to_memory)
+        hl_row.addWidget(self._highlight_spin)
+        hl_row.addWidget(make_hint("0 秒表示不显示高亮提示", "bolt"), 1)
+        hotspot_layout.addLayout(hl_row)
 
-        # 热区预览
-        hotspot_title = QLabel("点击区域位置")
-        hotspot_title.setFont(QFont("微软雅黑", 12, QFont.Bold))
-        hotspot_title.setStyleSheet("color: #555; background: transparent; margin-top: 6px;")
-        layout.addWidget(hotspot_title)
+        hotspot_layout.addSpacing(4)
 
         self._hotspot_preview = HotspotPreview(
             on_changed=lambda: self._sync_hotspot_to_memory()
         )
-        layout.addWidget(self._hotspot_preview)
+        hotspot_layout.addWidget(self._hotspot_preview, 0, Qt.AlignHCenter)
 
-        hotspot_hint = QLabel("拖拽粉色矩形调整热区在屏幕上的位置，保存后重新开始监听生效")
-        hotspot_hint.setFont(QFont("微软雅黑", 9))
-        hotspot_hint.setStyleSheet("color: #999; background: transparent; padding: 2px 0;")
-        layout.addWidget(hotspot_hint)
+        layout.addWidget(hotspot_card)
 
         layout.addStretch()
         page.hide()
@@ -887,6 +1120,7 @@ class SettingMainScroll(QFrame):
                 seen.add(exe)
                 item = QListWidgetItem(disp)
                 item.setData(Qt.UserRole, exe)
+                item.setToolTip(exe)
                 self._app_list.addItem(item)
 
         # 扫描注册表
@@ -913,6 +1147,7 @@ class SettingMainScroll(QFrame):
                                     seen.add(exe_name)
                                     item = QListWidgetItem(disp)
                                     item.setData(Qt.UserRole, exe_name)
+                                    item.setToolTip(exe_name)
                                     self._app_list.addItem(item)
                                     if self._app_list.count() >= 50:
                                         break
@@ -945,6 +1180,7 @@ class SettingMainScroll(QFrame):
                                 seen.add(exe_name)
                                 item = QListWidgetItem(disp)
                                 item.setData(Qt.UserRole, exe_name)
+                                item.setToolTip(exe_name)
                                 self._app_list.addItem(item)
                                 if self._app_list.count() >= 80:
                                     break

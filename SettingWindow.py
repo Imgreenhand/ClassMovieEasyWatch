@@ -1,80 +1,41 @@
-import sys
+"""设置修改窗口：顶部操作栏 + 左侧索引 + 右侧滚动内容。
+
+窗口为无边框圆角卡片，内部三块区域：
+* 顶部栏：品牌、配置档案选择、新建/保存/关闭；
+* 侧边栏：三个设置分类，带矢量图标与选中态；
+* 内容区：由 :class:`GUI.SettingMainScroll.SettingMainScroll` 按需构建页面。
+"""
+
+from __future__ import annotations
+
 import json
 import logging
-from pathlib import Path
-from PySide6.QtCore import Qt, QPoint, QTimer, QPropertyAnimation
-from PySide6.QtGui import QFont, QPixmap, QColor
+import sys
+
+from PySide6.QtCore import Qt, QPoint, QTimer, QSize
+from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
     QWidget, QApplication, QPushButton, QLabel,
-    QComboBox, QScrollArea, QFrame, QVBoxLayout,
-    QMessageBox, QGraphicsDropShadowEffect,
+    QComboBox, QScrollArea, QFrame, QVBoxLayout, QHBoxLayout,
+    QMessageBox,
 )
+
+from GUI import theme
 from GUI.SettingMainScroll import SettingMainScroll
+from GUI.widgets import NavItem
 from infrastructure.data_manager import ProfileStore
 from infrastructure.path_utils import get_data_dir, resource_path
+from infrastructure.version import APP_VERSION
 
 SAVE_DIR = get_data_dir()
 
-# ── 通用按钮样式：粉色边框白底 ──
-BTN_STYLE = """
-    QPushButton {
-        background: #ffffff;
-        border: 1px solid #fb7299;
-        border-radius: 4px;
-        color: #fb7299;
-        padding: 4px 14px;
-    }
-    QPushButton:hover {
-        background: #fff0f4;
-    }
-    QPushButton:pressed {
-        background: #ffe0ea;
-    }
-"""
-
-# ── 关闭按钮样式：粉色边框白底 ──
-CLOSE_BTN_STYLE = """
-    QPushButton {
-        background: #ffffff;
-        border: 1px solid #fb7299;
-        border-radius: 4px;
-        color: #fb7299;
-        font-weight: bold;
-        padding: 2px 8px;
-    }
-    QPushButton:hover {
-        background: #fb7299;
-        color: #ffffff;
-    }
-"""
-
-
-class SidebarItem(QFrame):
-    """侧边栏索引项，高亮表示选中"""
-
-    def __init__(self, text: str, parent: QWidget | None = None):
-        super().__init__(parent)
-        self.setFixedHeight(38)
-        self.setCursor(Qt.PointingHandCursor)
-
-        self.label = QLabel(text, self)
-        self.label.setFont(QFont("微软雅黑", 11))
-        self.label.setStyleSheet("color: #666; background: transparent; padding-left: 16px;")
-        self.label.setFixedHeight(38)
-
-        self._selected = False
-
-    def set_selected(self, selected: bool) -> None:
-        self._selected = selected
-        if selected:
-            self.setStyleSheet("background: #fff0f4; border-left: 3px solid #fb7299;")
-            self.label.setStyleSheet("color: #fb7299; background: transparent; padding-left: 13px;")
-        else:
-            self.setStyleSheet("background: transparent; border-left: 3px solid transparent;")
-            self.label.setStyleSheet("color: #666; background: transparent; padding-left: 16px;")
-
-    def mousePressEvent(self, event):
-        self.parent().parent()._on_sidebar_click(self)
+TOPBAR_H = 58
+SIDEBAR_W = 168
+NAV_ITEMS = [
+    ("热键修改", "keyboard"),
+    ("应用名称", "apps"),
+    ("个性化设置", "personal"),
+]
 
 
 class SettingWindow(QWidget):
@@ -82,84 +43,144 @@ class SettingWindow(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setWindowFlag(Qt.FramelessWindowHint)
-        self.setAttribute(Qt.WA_TranslucentBackground, False)
-        self.setStyleSheet("background-color: #ffffff;")
-        self.resize(900, 600)
-        self.setMinimumSize(700, 450)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.setWindowTitle("用户设置")
+
+        screen = QApplication.primaryScreen()
+        if screen is not None:
+            avail = screen.availableGeometry()
+            self.resize(
+                min(980, int(avail.width() * 0.9)),
+                min(700, int(avail.height() * 0.88)),
+            )
+        else:
+            self.resize(980, 700)
+        self.setMinimumSize(830, 560)
 
         self._drag_pos: QPoint | None = None
         self._current_nav: str = ""
 
+        self._setup_card()
         self._setup_topbar()
         self._setup_sidebar()
         self._setup_scroll_area()
         self._setup_message_overlay()
 
         self._refresh_profile_list()
+        self._on_sidebar_click(self._nav_items["热键修改"])
+
+    # ═══════════════════════════════════════════════════════
+    # 圆角卡片
+    # ═══════════════════════════════════════════════════════
+
+    def _setup_card(self) -> None:
+        margin = theme.CARD_MARGIN
+        self._card = QFrame(self)
+        self._card.setObjectName("card")
+        self._card.setStyleSheet(theme.card_qss(theme.RADIUS_CARD))
+        theme.add_shadow(self._card, blur=48, dy=10, alpha=46)
+        self._card.setGeometry(
+            margin, margin,
+            self.width() - margin * 2, self.height() - margin * 2,
+        )
 
     # ═══════════════════════════════════════════════════════
     # 顶栏
     # ═══════════════════════════════════════════════════════
 
     def _setup_topbar(self) -> None:
-        """顶栏：图标 + 当前配置下拉 + 新建配置 | 叉号"""
-        bar_h = 44
-        self._topbar = QFrame(self)
-        self._topbar.setFixedHeight(bar_h)
-        self._topbar.setStyleSheet("background: #ffffff; border-bottom: 1px solid #eee;")
+        """顶栏：品牌图标 + 标题 + 配置下拉 + 新建/保存/关闭"""
+        self._topbar = QFrame(self._card)
+        self._topbar.setObjectName("topbar")
+        self._topbar.setStyleSheet(theme.topbar_qss(theme.RADIUS_CARD))
+        self._topbar.setFixedHeight(TOPBAR_H)
 
-        # 图标
-        icon_label = QLabel(self._topbar)
-        icon_pix = QPixmap(resource_path("GUI/Art/Sign.svg"))
-        if not icon_pix.isNull():
-            icon_label.setPixmap(icon_pix.scaled(22, 22, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        icon_label.move(12, (bar_h - 22) // 2)
+        layout = QHBoxLayout(self._topbar)
+        layout.setContentsMargins(18, 0, 14, 0)
+        layout.setSpacing(10)
 
-        # 当前配置下拉
-        self._profile_combo = QComboBox(self._topbar)
+        # ── 品牌 + 标题 ──
+        brand = QLabel()
+        logo = QPixmap(resource_path("GUI/Art/Sign.svg"))
+        if not logo.isNull():
+            brand.setPixmap(logo.scaled(26, 26, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        brand.setFixedSize(26, 26)
+        brand.setStyleSheet("background: transparent; border: none;")
+        layout.addWidget(brand)
+
+        title_box = QVBoxLayout()
+        title_box.setContentsMargins(0, 0, 0, 0)
+        title_box.setSpacing(1)
+
+        title = QLabel("用户设置")
+        title.setFont(QFont(theme.FONT_FAMILY, 11, QFont.Bold))
+        title.setStyleSheet(f"color: {theme.TEXT}; background: transparent; border: none;")
+        title_box.addWidget(title)
+
+        subtitle = QLabel("修改后点击保存即可生效")
+        subtitle.setFont(QFont(theme.FONT_FAMILY, 8))
+        subtitle.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; background: transparent; border: none;"
+        )
+        title_box.addWidget(subtitle)
+
+        layout.addLayout(title_box)
+        layout.addStretch()
+
+        # ── 配置档案 ──
+        profile_label = QLabel("配置档案")
+        profile_label.setFont(QFont(theme.FONT_FAMILY, 9))
+        profile_label.setStyleSheet(
+            f"color: {theme.TEXT_SUB}; background: transparent; border: none;"
+        )
+        layout.addWidget(profile_label)
+
+        self._profile_combo = QComboBox()
         self._profile_combo.setEditable(False)
-        self._profile_combo.setFont(QFont("微软雅黑", 10))
-        self._profile_combo.setFixedWidth(140)
-        self._profile_combo.setStyleSheet("""
-            QComboBox {
-                background: #ffffff; color: #333; border: 1px solid #ddd;
-                border-radius: 4px; padding: 3px 8px;
-            }
-            QComboBox:hover { border-color: #fb7299; }
-            QComboBox QAbstractItemView {
-                background: #ffffff; color: #333; selection-background-color: #fff0f4;
-                outline: none;
-            }
-        """)
-        self._profile_combo.move(42, (bar_h - 28) // 2)
+        self._profile_combo.setFont(QFont(theme.FONT_FAMILY, 10))
+        self._profile_combo.setFixedSize(168, 34)
+        self._profile_combo.setCursor(Qt.PointingHandCursor)
+        self._profile_combo.setStyleSheet(theme.combo_qss(height=32))
         self._profile_combo.currentTextChanged.connect(self._on_profile_changed)
+        layout.addWidget(self._profile_combo)
 
-        # 新建配置按钮
-        self._btn_new = QPushButton("新建配置", self._topbar)
-        self._btn_new.setFont(QFont("微软雅黑", 9))
-        self._btn_new.setFixedHeight(26)
-        self._btn_new.setStyleSheet(BTN_STYLE)
-        self._btn_new.adjustSize()
-        self._btn_new.move(188, (bar_h - 26) // 2)
+        # ── 新建配置 ──
+        self._btn_new = QPushButton("新建配置")
+        self._btn_new.setIcon(theme.icon("add", 15, theme.PINK))
+        self._btn_new.setIconSize(QSize(15, 15))
+        self._btn_new.setFont(QFont(theme.FONT_FAMILY, 9))
+        self._btn_new.setFixedHeight(34)
+        self._btn_new.setCursor(Qt.PointingHandCursor)
+        self._btn_new.setStyleSheet(theme.secondary_button_qss(height=32, font_size=9))
+        self._btn_new.setToolTip("基于默认值新建一个配置档案")
         self._btn_new.clicked.connect(self._on_new_profile)
+        layout.addWidget(self._btn_new)
 
-        # 保存按钮
-        self._btn_save = QPushButton("保存", self._topbar)
-        self._btn_save.setFont(QFont("微软雅黑", 10, QFont.Bold))
-        self._btn_save.setFixedHeight(26)
-        self._btn_save.setStyleSheet(BTN_STYLE)
-        self._btn_save.adjustSize()
+        # ── 保存 ──
+        self._btn_save = QPushButton("保存")
+        self._btn_save.setIcon(theme.icon("save", 15, "#ffffff"))
+        self._btn_save.setIconSize(QSize(15, 15))
+        self._btn_save.setFont(QFont(theme.FONT_FAMILY, 10, QFont.Bold))
+        self._btn_save.setFixedHeight(34)
+        self._btn_save.setMinimumWidth(88)
+        self._btn_save.setCursor(Qt.PointingHandCursor)
+        self._btn_save.setStyleSheet(theme.primary_button_qss(height=34, font_size=10))
         self._btn_save.clicked.connect(self._on_save)
+        layout.addWidget(self._btn_save)
 
-        # 叉号关闭按钮
-        self._btn_close = QPushButton("X", self._topbar)
-        self._btn_close.setFont(QFont("微软雅黑", 11, QFont.Bold))
-        self._btn_close.setFixedSize(30, 26)
-        self._btn_close.setStyleSheet(CLOSE_BTN_STYLE)
+        # ── 关闭 ──
+        self._btn_close = QPushButton()
+        self._btn_close.setIcon(theme.icon("close", 16, theme.TEXT_SUB))
+        self._btn_close.setIconSize(QSize(16, 16))
+        self._btn_close.setFixedSize(32, 32)
+        self._btn_close.setCursor(Qt.PointingHandCursor)
+        self._btn_close.setStyleSheet(theme.ghost_button_qss(32))
+        self._btn_close.setToolTip("关闭")
         self._btn_close.clicked.connect(self.close)
+        layout.addWidget(self._btn_close)
 
-        self._bar_h = bar_h
+        self._bar_h = TOPBAR_H
 
     # ═══════════════════════════════════════════════════════
     # 侧边栏
@@ -167,21 +188,32 @@ class SettingWindow(QWidget):
 
     def _setup_sidebar(self) -> None:
         """左侧索引侧边栏"""
-        self._sidebar = QFrame(self)
-        self._sidebar.setStyleSheet("background: #fafafa; border-right: 1px solid #eee;")
-        self._sidebar.setFixedWidth(150)
+        self._sidebar = QFrame(self._card)
+        self._sidebar.setObjectName("sidebar")
+        self._sidebar.setStyleSheet(theme.sidebar_qss(theme.RADIUS_CARD))
+        self._sidebar.setFixedWidth(SIDEBAR_W)
 
-        self._nav_items: dict[str, SidebarItem] = {}
-        items = ["热键修改", "应用名称", "个性化设置"]
-        y = 12
-        for text in items:
-            item = SidebarItem(text, self._sidebar)
-            item.setFixedWidth(150)
-            item.move(0, y)
+        layout = QVBoxLayout(self._sidebar)
+        layout.setContentsMargins(10, 14, 10, 14)
+        layout.setSpacing(4)
+
+        self._nav_items: dict[str, NavItem] = {}
+        for text, icon_name in NAV_ITEMS:
+            item = NavItem(text, text, icon_name, on_activated=self._on_sidebar_click)
+            layout.addWidget(item)
             self._nav_items[text] = item
-            y += 42
 
-        self._sidebar_items = items
+        layout.addStretch()
+
+        version = QLabel(f"v{APP_VERSION}")
+        version.setFont(QFont(theme.FONT_FAMILY, 8))
+        version.setAlignment(Qt.AlignCenter)
+        version.setStyleSheet(
+            f"color: {theme.TEXT_MUTED}; background: transparent; border: none;"
+        )
+        layout.addWidget(version)
+
+        self._sidebar_items = [t for t, _ in NAV_ITEMS]
 
     # ═══════════════════════════════════════════════════════
     # 滚动区域
@@ -189,10 +221,12 @@ class SettingWindow(QWidget):
 
     def _setup_scroll_area(self) -> None:
         """主内容滚动区域"""
-        self._scroll = QScrollArea(self)
+        self._scroll = QScrollArea(self._card)
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(QFrame.NoFrame)
-        self._scroll.setStyleSheet("background: #ffffff; border: none;")
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._scroll.setStyleSheet(theme.scroll_qss())
+        self._scroll.viewport().setStyleSheet("background: transparent;")
 
         self._main_scroll = SettingMainScroll()
         self._scroll.setWidget(self._main_scroll)
@@ -202,47 +236,68 @@ class SettingWindow(QWidget):
     # ═══════════════════════════════════════════════════════
 
     def _setup_message_overlay(self) -> None:
-        """创建内容区上方的内联消息标签"""
-        self._msg_label = QLabel(self)
-        self._msg_label.setFont(QFont("微软雅黑", 12, QFont.Bold))
-        self._msg_label.setAlignment(Qt.AlignCenter)
-        self._msg_label.setStyleSheet("""
-            QLabel {
-                color: #FFB027;
-                background: rgba(45, 30, 15, 0.78);
-                border: 1px solid #FFB027;
-                border-radius: 20px;
-                padding: 8px 28px;
-            }
-        """)
-        self._msg_label.hide()
+        """内容区上方的内联提示胶囊"""
+        self._msg_frame = QFrame(self._card)
+        self._msg_frame.setObjectName("inlineMsg")
+        self._msg_frame.setStyleSheet(
+            f"""
+            QFrame#inlineMsg {{
+                background: {theme.PINK_LIGHT};
+                border: 1px solid {theme.PINK_EDGE};
+                border-radius: 18px;
+            }}
+            """
+        )
+        theme.add_shadow(self._msg_frame, blur=18, dy=4, alpha=34)
+
+        msg_layout = QHBoxLayout(self._msg_frame)
+        msg_layout.setContentsMargins(16, 6, 18, 6)
+        msg_layout.setSpacing(8)
+
+        self._msg_icon = QLabel()
+        self._msg_icon.setFixedSize(16, 16)
+        self._msg_icon.setStyleSheet("background: transparent; border: none;")
+        msg_layout.addWidget(self._msg_icon)
+
+        self._msg_label = QLabel()
+        self._msg_label.setFont(QFont(theme.FONT_FAMILY, 10, QFont.Bold))
+        self._msg_label.setStyleSheet(
+            f"color: {theme.PINK_DEEP}; background: transparent; border: none;"
+        )
+        msg_layout.addWidget(self._msg_label)
+
+        self._msg_frame.hide()
 
         self._msg_timer = QTimer(self)
         self._msg_timer.setSingleShot(True)
         self._msg_timer.timeout.connect(self._hide_message)
 
-    def _show_inline_message(self, text: str, duration_ms: int = 3000) -> None:
+    def _show_inline_message(
+        self, text: str, duration_ms: int = 3000, icon_name: str = "check_circle"
+    ) -> None:
         """在内容区上方显示内联消息，自动消失"""
         self._msg_label.setText(text)
-        self._msg_label.adjustSize()
-        # 定位：内容区顶部居中
-        sidebar_w = self._sidebar.width()
-        bar_h = self._bar_h
-        content_w = self.width() - sidebar_w
-        msg_w = self._msg_label.width()
-        self._msg_label.setGeometry(
-            sidebar_w + (content_w - msg_w) // 2,
-            bar_h + 12,
-            msg_w,
-            self._msg_label.height(),
-        )
-        self._msg_label.show()
-        self._msg_label.raise_()
+        try:
+            self._msg_icon.setPixmap(theme.icon_pixmap(icon_name, 16, theme.PINK_DEEP))
+            self._msg_icon.show()
+        except FileNotFoundError:
+            self._msg_icon.hide()
+
+        self._msg_frame.adjustSize()
+        self._position_message()
+        self._msg_frame.show()
+        self._msg_frame.raise_()
         self._msg_timer.start(duration_ms)
+
+    def _position_message(self) -> None:
+        """让消息胶囊停在内容区右上角，避免遮挡页面标题"""
+        x = self._card.width() - self._msg_frame.width() - 24
+        y = TOPBAR_H + 12
+        self._msg_frame.move(x, y)
 
     def _hide_message(self) -> None:
         """隐藏消息标签"""
-        self._msg_label.hide()
+        self._msg_frame.hide()
 
     # ═══════════════════════════════════════════════════════
     # 配置文件管理
@@ -302,10 +357,12 @@ class SettingWindow(QWidget):
         try:
             SAVE_DIR.mkdir(parents=True, exist_ok=True)
             path = SAVE_DIR / f"{name}.json"
-            path.write_text(json.dumps(default_data, indent=4, ensure_ascii=False), encoding="utf-8")
+            path.write_text(
+                json.dumps(default_data, indent=4, ensure_ascii=False), encoding="utf-8"
+            )
             ProfileStore().reload()
         except OSError as e:
-            logging.error(f"新建配置 {name} 失败: {e}")
+            logging.error("新建配置 %s 失败: %s", name, e)
             QMessageBox.warning(self, "创建失败", f"无法创建配置:\n{e}")
             return
 
@@ -313,6 +370,7 @@ class SettingWindow(QWidget):
         idx = self._profile_combo.findText(name)
         if idx >= 0:
             self._profile_combo.setCurrentIndex(idx)
+        self._show_inline_message(f"已创建配置 “{name}”", icon_name="add")
 
     def _on_save(self) -> None:
         """收集表单数据并通过 ProfileStore.update_profile 保存到磁盘"""
@@ -347,11 +405,11 @@ class SettingWindow(QWidget):
                 QMessageBox.warning(self, "保存失败", f"配置档案 '{name}' 保存失败")
                 return
         except Exception as e:
-            logging.error(f"保存配置 {name} 异常: {e}")
+            logging.error("保存配置 %s 异常: %s", name, e)
             QMessageBox.critical(self, "保存异常", f"保存时发生错误:\n{e}")
             return
 
-        self._show_inline_message(f"配置 '{name}' 已保存", 3000)
+        self._show_inline_message(f"配置 “{name}” 已保存")
         self._refresh_profile_list()
         self._profile_combo.setCurrentText(name)
 
@@ -359,13 +417,14 @@ class SettingWindow(QWidget):
     # 侧边栏点击
     # ═══════════════════════════════════════════════════════
 
-    def _on_sidebar_click(self, clicked: SidebarItem) -> None:
+    def _on_sidebar_click(self, clicked: NavItem) -> None:
         """侧边栏选中切换"""
         for item in self._nav_items.values():
             item.set_selected(item is clicked)
         for text, item in self._nav_items.items():
             if item is clicked:
                 self._main_scroll.switch_page(text)
+                self._scroll.verticalScrollBar().setValue(0)
                 break
 
     # ═══════════════════════════════════════════════════════
@@ -373,31 +432,37 @@ class SettingWindow(QWidget):
     # ═══════════════════════════════════════════════════════
 
     def resizeEvent(self, event):
-        bar_h = self._bar_h
-        sidebar_w = self._sidebar.width()
+        if not hasattr(self, "_card"):
+            super().resizeEvent(event)
+            return
 
-        self._topbar.setGeometry(0, 0, self.width(), bar_h)
-        self._btn_close.move(self.width() - 40, (bar_h - 26) // 2)
-        self._btn_save.move(self.width() - 110, (bar_h - 26) // 2)
+        margin = theme.CARD_MARGIN
+        card_w = self.width() - margin * 2
+        card_h = self.height() - margin * 2
 
-        self._sidebar.setGeometry(0, bar_h, sidebar_w, self.height() - bar_h)
-        self._scroll.setGeometry(sidebar_w, bar_h,
-                                 self.width() - sidebar_w, self.height() - bar_h)
+        self._card.setGeometry(margin, margin, card_w, card_h)
+        self._topbar.setGeometry(0, 0, card_w, TOPBAR_H)
+        self._sidebar.setGeometry(0, TOPBAR_H, SIDEBAR_W, card_h - TOPBAR_H)
+        self._scroll.setGeometry(
+            SIDEBAR_W, TOPBAR_H, card_w - SIDEBAR_W, card_h - TOPBAR_H
+        )
 
-        # 若消息标签可见，重新定位
-        if self._msg_label.isVisible():
-            content_w = self.width() - sidebar_w
-            msg_w = self._msg_label.width()
-            self._msg_label.move(
-                sidebar_w + (content_w - msg_w) // 2,
-                bar_h + 12,
-            )
+        if self._msg_frame.isVisible():
+            self._position_message()
 
         super().resizeEvent(event)
 
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Escape:
+            self.close()
+            return
+        super().keyPressEvent(event)
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
-            self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            self._drag_pos = (
+                event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            )
 
     def mouseMoveEvent(self, event):
         if self._drag_pos is not None and event.buttons() == Qt.LeftButton:

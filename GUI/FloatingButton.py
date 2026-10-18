@@ -1,11 +1,31 @@
+"""鼠标热区触发：用系统鼠标钩子在屏幕指定区域切换隐藏/还原。
+
+界面部分只负责在两处「画」：
+* 热区位置的高亮浮层（启动后短暂显示，提示用户点哪里）；
+* 高亮使用矢量绘制，不依赖位图素材。
+"""
+
+from __future__ import annotations
+
 from collections.abc import Callable
+
 from pynput import mouse
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QGuiApplication, QPainter
+from PySide6.QtCore import (
+    Qt, QTimer, QPropertyAnimation, QEasingCurve, QRectF,
+)
+from PySide6.QtGui import (
+    QColor, QFont, QGuiApplication, QPainter, QPainterPath, QPen,
+)
 from PySide6.QtWidgets import QApplication, QWidget
+
+from GUI import theme
+
+HINT_TEXT = "点击此处隐藏 / 还原"
 
 
 class _HotspotOverlay(QWidget):
+    """半透明浮层：在屏幕上标出可点击区域"""
+
     def __init__(self, width: int, height: int, x: float, y: float):
         super().__init__(None, Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
@@ -14,6 +34,8 @@ class _HotspotOverlay(QWidget):
         self._hotspot_x = x
         self._hotspot_y = y
         self._highlighting = False
+        self._anim_in: QPropertyAnimation | None = None
+        self._anim_out: QPropertyAnimation | None = None
 
         self.resize(width, height)
         self._update_position()
@@ -30,12 +52,33 @@ class _HotspotOverlay(QWidget):
         self.move(pos_x, pos_y)
 
     def highlight(self, seconds: int) -> None:
-        """高亮显示 n 秒后自动消失，0 秒则不高亮"""
+        """淡入显示 n 秒后自动淡出，0 秒则不高亮"""
         if seconds <= 0:
             return
         self._highlighting = True
         self.update()
-        QTimer.singleShot(seconds * 1000, self._clear_highlight)
+
+        self.setWindowOpacity(0.0)
+        self._anim_in = QPropertyAnimation(self, b"windowOpacity", self)
+        self._anim_in.setDuration(220)
+        self._anim_in.setStartValue(0.0)
+        self._anim_in.setEndValue(1.0)
+        self._anim_in.setEasingCurve(QEasingCurve.OutCubic)
+        self._anim_in.start()
+
+        fade_delay = max(400, seconds * 1000 - 400)
+        QTimer.singleShot(fade_delay, self._start_fade_out)
+
+    def _start_fade_out(self) -> None:
+        if not self._highlighting:
+            return
+        self._anim_out = QPropertyAnimation(self, b"windowOpacity", self)
+        self._anim_out.setDuration(400)
+        self._anim_out.setStartValue(self.windowOpacity())
+        self._anim_out.setEndValue(0.0)
+        self._anim_out.setEasingCurve(QEasingCurve.InCubic)
+        self._anim_out.finished.connect(self._clear_highlight)
+        self._anim_out.start()
 
     def _clear_highlight(self) -> None:
         self._highlighting = False
@@ -44,11 +87,51 @@ class _HotspotOverlay(QWidget):
     def paintEvent(self, event) -> None:
         if not self._highlighting:
             return
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.setBrush(QColor(251, 114, 153, 130))
+
+        rect = QRectF(self.rect()).adjusted(1.5, 1.5, -1.5, -1.5)
+
+        # 热区：粉色半透明圆角块
+        path = QPainterPath()
+        path.addRoundedRect(rect, 14, 14)
+        painter.fillPath(path, QColor(251, 114, 153, 52))
+        painter.setPen(QPen(QColor(251, 114, 153, 235), 2))
+        painter.drawPath(path)
+
+        # 四角定位点
         painter.setPen(Qt.NoPen)
-        painter.drawRect(self.rect())
+        painter.setBrush(QColor(251, 114, 153, 235))
+        for cx, cy in [
+            (rect.left() + 2, rect.top() + 2),
+            (rect.right() - 2, rect.top() + 2),
+            (rect.left() + 2, rect.bottom() - 2),
+            (rect.right() - 2, rect.bottom() - 2),
+        ]:
+            painter.drawEllipse(QRectF(cx - 3, cy - 3, 6, 6))
+
+        # 中心提示胶囊
+        font = QFont(theme.FONT_FAMILY, 10, QFont.Bold)
+        painter.setFont(font)
+        metrics = painter.fontMetrics()
+        text_w = metrics.horizontalAdvance(HINT_TEXT)
+        pill_w = text_w + 34
+        pill_h = 32
+        pill = QRectF(
+            rect.center().x() - pill_w / 2,
+            rect.center().y() - pill_h / 2,
+            pill_w,
+            pill_h,
+        )
+        pill_path = QPainterPath()
+        pill_path.addRoundedRect(pill, pill_h / 2, pill_h / 2)
+        painter.fillPath(pill_path, QColor(255, 255, 255, 238))
+        painter.setPen(QPen(QColor(251, 114, 153, 200), 1))
+        painter.drawPath(pill_path)
+
+        painter.setPen(QColor(theme.PINK_DEEP))
+        painter.drawText(pill, Qt.AlignCenter, HINT_TEXT)
 
 
 class FloatingButton:
