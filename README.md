@@ -1,4 +1,4 @@
-﻿# ClassMovieEasyWatch
+# ClassMovieEasyWatch
 
 课堂观影一键隐藏 / 还原工具。支持全局热键和鼠标点击触发两种触发方式。
 
@@ -8,14 +8,29 @@
 ---
 ## 运行截图
 
-![](ReadMeNeed/MenuP.png)  
->菜单栏
-![](ReadMeNeed/StartP.png)  
->开始监听
-![](ReadMeNeed/KeyP.png)  
-![](ReadMeNeed/SettingP.png)  
-![](ReadMeNeed/exeP.png)  
->设置界面
+**托盘菜单**
+
+![](ReadMeNeed/MenuP.png)
+
+**开始监听**
+
+![](ReadMeNeed/StartP.png)
+
+**设置界面 · 热键修改**
+
+![](ReadMeNeed/KeyP.png)
+
+**设置界面 · 应用名称**
+
+![](ReadMeNeed/exeP.png)
+
+**设置界面 · 个性化设置**
+
+![](ReadMeNeed/SettingP.png)
+
+**关于界面**
+
+![](ReadMeNeed/AboutP.png)
 
 ## 功能
 
@@ -25,6 +40,7 @@
 - 配置热加载，设置保存后即时生效
 - 多配置档案，自定义热键、浏览器、热区
 - 系统托盘，预飞检查，Toast 提示
+- 无边框圆角卡片界面，图标全部来自项目内置矢量素材
 
 ## 依赖
 
@@ -101,19 +117,24 @@ ClassMovieEasyWatch/
 │   ├── browser_finder.py
 │   ├── hotkey_listener.py
 │   ├── data_manager.py
-│   └── path_utils.py
+│   ├── path_utils.py
+│   └── version.py              # 版本号
 ├── GUI/                        # GUI 组件
-│   ├── toast.py
-│   ├── StartWindow.py
-│   ├── FloatingButton.py
-│   ├── AboutWindow.py
-│   ├── SettingMainScroll.py
-│   └── Art/
-├── SettingWindow.py
+│   ├── theme.py                # 主题、样式表与矢量图标
+│   ├── widgets.py              # 侧边栏导航等公共组件
+│   ├── toast.py                # Toast 提示
+│   ├── StartWindow.py          # 开始窗口
+│   ├── FloatingButton.py       # 热区触发与高亮浮层
+│   ├── AboutWindow.py          # 关于窗口
+│   ├── SettingMainScroll.py    # 设置页内容
+│   └── Art/                    # 插画素材与矢量图标
+├── SettingWindow.py            # 设置窗口
 ├── SaveData/default.json       # 配置模板
 └── About/                      # 关于页面
 ```
 
 ## 版本
 
-[v0.0.0](https://github.com/Imgreenhand/ClassMovieEasyWatch/releases) (2026-08) — 初始版本发布
+[v0.0.1](https://github.com/Imgreenhand/ClassMovieEasyWatch/releases) (2026-10) — 界面重构：统一主题、矢量图标、圆角卡片窗口
+
+[v0.0.0](https://github.com/Imgreenhand/ClassMovieEasyWatch/releases/tag/0.0.0) — 初始版本发布
