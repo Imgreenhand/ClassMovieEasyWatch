@@ -547,12 +547,10 @@ class HotspotPreview(QFrame):
         pill_w = metrics.horizontalAdvance(pill_text) + 20
         pill_rect = QRect(pr.right() - pill_w, 12, pill_w, 22)
         painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor(255, 255, 255))
+        painter.setBrush(QColor(216, 85, 123))
         painter.drawRoundedRect(pill_rect, 11, 11)
         painter.setBrush(Qt.NoBrush)
-        painter.setPen(QPen(QColor(226, 210, 217), 1))
-        painter.drawRoundedRect(pill_rect, 11, 11)
-        painter.setPen(QColor(184, 57, 94))
+        painter.setPen(QColor(255, 255, 255))
         painter.drawText(pill_rect, Qt.AlignCenter, pill_text)
 
         # 底部说明
