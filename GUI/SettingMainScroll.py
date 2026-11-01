@@ -541,17 +541,18 @@ class HotspotPreview(QFrame):
         hw = int(sw * self._hotspot_w_pct)
         hh = int(sh * self._hotspot_h_pct)
         pill_text = f"{hw} × {hh}"
-        pill_font = QFont(theme.FONT_FAMILY, 8, QFont.Bold)
+        pill_font = QFont(theme.FONT_FAMILY, 9, QFont.Bold)
         painter.setFont(pill_font)
         metrics = painter.fontMetrics()
         pill_w = metrics.horizontalAdvance(pill_text) + 20
-        pill_rect = QRect(pr.right() - pill_w, 13, pill_w, 20)
-        pill_path = QPainterPath()
-        pill_path.addRoundedRect(pill_rect, 10, 10)
-        painter.fillPath(pill_path, QColor(255, 240, 244))
-        painter.setPen(QPen(QColor(255, 224, 234), 1))
-        painter.drawPath(pill_path)
-        painter.setPen(QColor(216, 85, 123))
+        pill_rect = QRect(pr.right() - pill_w, 12, pill_w, 22)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(255, 255, 255))
+        painter.drawRoundedRect(pill_rect, 11, 11)
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(QColor(226, 210, 217), 1))
+        painter.drawRoundedRect(pill_rect, 11, 11)
+        painter.setPen(QColor(184, 57, 94))
         painter.drawText(pill_rect, Qt.AlignCenter, pill_text)
 
         # 底部说明
