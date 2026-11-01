@@ -311,7 +311,7 @@ def line_edit_qss(height: int = 34, radius: int = RADIUS) -> str:
 
 def spin_qss(height: int = 30, radius: int = RADIUS) -> str:
     up = svg_url("caret_up", PINK)
-    down = svg_url("arrow_down", PINK)
+    down = svg_url("caret_down", PINK)
     return f"""
         QSpinBox {{
             background: {BG};
