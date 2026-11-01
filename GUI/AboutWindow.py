@@ -160,10 +160,11 @@ class AboutWindow(QWidget):
     def _setup_content(self) -> None:
         self._browser = QTextBrowser(self._card)
         self._browser.setOpenExternalLinks(True)
+        self._browser.setFrameShape(QFrame.NoFrame)
         self._browser.setStyleSheet(
             f"""
             QTextBrowser {{
-                background: {theme.BG};
+                background: transparent;
                 border: none;
                 color: {theme.TEXT};
                 padding: 10px 22px;
@@ -171,6 +172,8 @@ class AboutWindow(QWidget):
             """
             + theme.scroll_qss()
         )
+        # 内容区透明，露出卡片的右下圆角
+        self._browser.viewport().setAutoFillBackground(False)
         self._browser.setFont(QFont(theme.FONT_FAMILY, 10))
         self._browser.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
@@ -370,7 +373,8 @@ def _md_to_html(md: str) -> str:
 
     css = f"""
     <style>
-        body {{ font-family: "{theme.FONT_FAMILY}", sans-serif; color: {theme.TEXT}; }}
+        body {{ font-family: "{theme.FONT_FAMILY}", sans-serif; color: {theme.TEXT};
+                background: transparent; }}
         p {{ margin: 5px 0; }}
         li {{ margin: 3px 0; }}
         a {{ color: {theme.PINK}; text-decoration: none; }}
